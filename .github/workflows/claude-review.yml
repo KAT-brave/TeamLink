@@ -30,5 +30,12 @@ jobs:
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment"
+          # gh api での書き込み(コメント投稿)を許可する
+          settings: |
+            {
+              "permissions": {
+                "allow": ["Bash(gh api:*)", "Bash(gh pr:*)"]
+              }
+            }
           claude_args: |
             --model claude-sonnet-4-6
