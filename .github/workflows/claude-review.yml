@@ -23,6 +23,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          track_progress: true # レビュー結果をPRコメントとして自動投稿する
           claude_args: |
             --model claude-sonnet-4-6
             --max-turns 15
@@ -30,6 +31,9 @@ jobs:
             # PRレビュー
 
             このPRで変更されたファイルを確認し、以下の観点でレビューを実施してください。
+            指摘は `mcp__github_inline_comment__create_inline_comment` ツールを使い、
+            該当ファイル/行に対するインラインコメントとして投稿してください。
+            全体の総括は進捗コメントに記載してください。
 
             ## レビュー手順
 
