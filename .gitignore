@@ -1,0 +1,19 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Dependencies / build (言語確定後に追記)
+node_modules/
+dist/
+build/

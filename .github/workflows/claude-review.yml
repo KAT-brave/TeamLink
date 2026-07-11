@@ -1,0 +1,32 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize] # PR作成時 + PRブランチへのpush時
+
+permissions:
+  contents: read
+  pull-requests: write # レビューコメント投稿に必要
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            このプルリクエストの差分をレビューしてください。
+            観点: バグ・ロジック誤り、セキュリティ、エッジケース、可読性、
+            テスト不足。指摘は該当ファイル/行を示し、重要度(重要/軽微)を付けて
+            日本語のコメントとして投稿してください。問題がなければ
+            その旨を簡潔に伝えてください。
+          claude_args: |
+            --max-turns 15
