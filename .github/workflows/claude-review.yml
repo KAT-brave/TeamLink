@@ -4,29 +4,67 @@ on:
   pull_request:
     types: [opened, synchronize] # PR作成時 + PRブランチへのpush時
 
-permissions:
-  contents: read
-  pull-requests: write # レビューコメント投稿に必要
-  issues: write
-
 jobs:
-  review:
+  claude-review:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # レビューコメント投稿に必要
+      issues: read
+      id-token: write
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Claude Code Review
+      - name: Run Claude Code Review
+        id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          prompt: |
-            このプルリクエストの差分をレビューしてください。
-            観点: バグ・ロジック誤り、セキュリティ、エッジケース、可読性、
-            テスト不足。指摘は該当ファイル/行を示し、重要度(重要/軽微)を付けて
-            日本語のコメントとして投稿してください。問題がなければ
-            その旨を簡潔に伝えてください。
           claude_args: |
+            --model claude-sonnet-4-6
             --max-turns 15
+          prompt: |
+            # PRレビュー
+
+            このPRで変更されたファイルを確認し、以下の観点でレビューを実施してください。
+
+            ## レビュー手順
+
+            ### ステップ1: 過去のレビュー確認（重複指摘の防止）
+            1. このPRの過去のレビューコメントを確認
+            2. 対応済みの項目は再指摘しない
+            3. 新規変更または未対応の項目のみをレビュー対象とする
+
+            ### ステップ2: 変更ファイルの理解
+            - 変更の意図（新機能、バグ修正、リファクタリング等）
+            - 影響範囲
+            - PRの説明との整合性
+
+            ### ステップ3: レビュー実施
+
+            #### プロトタイプ（prototype/**）の変更がある場合
+            - [ ] HTMLの構造が適切か（セマンティックなタグの使用）
+            - [ ] CSSの記述が整理されているか
+            - [ ] JavaScriptにセキュリティ上の問題がないか（XSS等）
+            - [ ] console.logがデバッグ用途で残っていないか
+            - [ ] アクセシビリティの基本対応がされているか
+
+            #### ドキュメント（docs/**、*.md）の変更がある場合
+            - [ ] ドキュメント間の整合性が取れているか
+            - [ ] Markdownフォーマットが正しいか
+            - [ ] 内容が正確か
+            - [ ] リンク切れがないか
+
+            #### ワークフロー（.github/**）の変更がある場合
+            - [ ] YAML構文が正しいか
+            - [ ] パーミッション設定が最小権限の原則に従っているか
+            - [ ] シークレットの取り扱いが適切か
+
+            ### ステップ4: レビュー結果の出力
+
+            指摘は該当ファイル/行を示し、重要度（重要/軽微）を付けて日本語の
+            コメントとして投稿してください。
+            **問題なしと判断した項目は出力しないでください。**
