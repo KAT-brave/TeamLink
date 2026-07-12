@@ -2,7 +2,7 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize] # PR作成時 + PRブランチへのpush時
+    types: [opened, reopened] # PR作成/再オープン時のみ(コスト抑制: 毎pushでは実行しない)
 
 permissions:
   contents: read
