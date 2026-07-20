@@ -1,0 +1,23 @@
+# PostgreSQL 設定。ローカル(Homebrew)と docker-compose の双方で動くよう環境変数で切替。
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  host: <%= ENV.fetch("DB_HOST") { "localhost" } %>
+  port: <%= ENV.fetch("DB_PORT") { 5432 } %>
+  username: <%= ENV.fetch("DB_USERNAME") { ENV["USER"] } %>
+  password: <%= ENV.fetch("DB_PASSWORD") { "" } %>
+
+development:
+  <<: *default
+  database: <%= ENV.fetch("DB_NAME") { "teamlink_development" } %>
+
+test:
+  <<: *default
+  database: <%= ENV.fetch("DB_NAME_TEST") { "teamlink_test" } %>
+
+production:
+  <<: *default
+  database: <%= ENV.fetch("DB_NAME") { "teamlink_production" } %>
+  username: <%= ENV.fetch("DB_USERNAME") { "teamlink" } %>
+  password: <%= ENV["DB_PASSWORD"] %>
