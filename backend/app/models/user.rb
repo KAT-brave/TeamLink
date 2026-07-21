@@ -1,6 +1,10 @@
 class User < ApplicationRecord
   has_secure_password
 
+  has_many :workspace_memberships, dependent: :destroy
+  has_many :workspaces, through: :workspace_memberships
+  has_many :owned_workspaces, class_name: "Workspace", foreign_key: :owner_id, dependent: :destroy, inverse_of: :owner
+
   # メールは大文字小文字を無視して扱うため保存前に正規化する。
   before_validation :normalize_email
 
