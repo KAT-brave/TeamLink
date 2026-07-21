@@ -2,6 +2,8 @@ import { Routes, Route } from 'react-router-dom'
 import { Login } from './pages/Login'
 import { Signup } from './pages/Signup'
 import { Home } from './pages/Home'
+import { Workspaces } from './pages/Workspaces'
+import { WorkspaceDetail } from './pages/WorkspaceDetail'
 import { ProtectedRoute } from './components/ProtectedRoute'
 
 export default function App() {
@@ -14,6 +16,22 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Home />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/workspaces"
+        element={
+          <ProtectedRoute>
+            <Workspaces />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/workspaces/:id"
+        element={
+          <ProtectedRoute>
+            <WorkspaceDetail />
           </ProtectedRoute>
         }
       />
