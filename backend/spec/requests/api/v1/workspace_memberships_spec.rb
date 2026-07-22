@@ -82,4 +82,22 @@ RSpec.describe "Api::V1::WorkspaceMemberships", type: :request do
       expect(response).to have_http_status(:not_found)
     end
   end
+
+  describe "認証" do
+    it "未ログインは401 (GET members)" do
+      get "/api/v1/workspaces/#{ws.id}/members"
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    it "未ログインは401 (DELETE members/me)" do
+      delete "/api/v1/workspaces/#{ws.id}/members/me"
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    it "未ログインは401 (DELETE members/:id)" do
+      other = create(:user)
+      delete "/api/v1/workspaces/#{ws.id}/members/#{other.id}"
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
 end

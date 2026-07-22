@@ -33,4 +33,16 @@ RSpec.describe "Api::V1::WorkspaceInviteCodes", type: :request do
     get "/api/v1/workspaces/#{ws.id}/invite_code"
     expect(response).to have_http_status(:not_found)
   end
+
+  describe "認証" do
+    it "未ログインはGETで401" do
+      get "/api/v1/workspaces/#{ws.id}/invite_code"
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    it "未ログインはPOSTで401" do
+      post "/api/v1/workspaces/#{ws.id}/invite_code"
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
 end
