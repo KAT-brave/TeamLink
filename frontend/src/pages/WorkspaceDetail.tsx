@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import * as api from '../api/workspaces'
 import type { Member, Role, Workspace } from '../api/workspaces'
 import { useAuth } from '../store/auth'
@@ -86,6 +86,9 @@ export function WorkspaceDetail() {
   return (
     <div>
       <h1>{workspace.name}</h1>
+      <p>
+        <Link to={`/workspaces/${workspaceId}/channels`}>チャンネル一覧へ</Link>
+      </p>
       {error && <p role="alert">{error}</p>}
 
       {isManager && (

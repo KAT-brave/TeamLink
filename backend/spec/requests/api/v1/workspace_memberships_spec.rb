@@ -100,4 +100,35 @@ RSpec.describe "Api::V1::WorkspaceMemberships", type: :request do
       expect(response).to have_http_status(:unauthorized)
     end
   end
+
+  describe "退出後の非公開チャンネルアクセス制御" do
+    let(:member) { create(:user) }
+    let(:private_channel) { create(:channel, workspace: ws, kind: :private, created_by: owner) }
+
+    before do
+      create(:workspace_membership, workspace: ws, user: member, role: :member)
+      create(:channel_membership, channel: private_channel, user: member)
+      login_as(member)
+    end
+
+    it "退出前は非公開チャンネル詳細を取得できる" do
+      get "/api/v1/workspaces/#{ws.id}/channels/#{private_channel.id}"
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "退出後は非公開チャンネル詳細が404になる" do
+      delete "/api/v1/workspaces/#{ws.id}/members/me"
+      get "/api/v1/workspaces/#{ws.id}/channels/#{private_channel.id}"
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "退出後に再参加しても非公開チャンネルが一覧に出ない" do
+      delete "/api/v1/workspaces/#{ws.id}/members/me"
+      create(:workspace_membership, workspace: ws, user: member, role: :member)
+      login_as(member)
+      get "/api/v1/workspaces/#{ws.id}/channels"
+      channels = JSON.parse(response.body)["channels"]
+      expect(channels.map { |c| c["id"] }).not_to include(private_channel.id)
+    end
+  end
 end

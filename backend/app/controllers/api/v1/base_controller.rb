@@ -21,6 +21,10 @@ module Api
         render json: { error: "入力が不正です。" }, status: :unprocessable_entity
       end
 
+      rescue_from ActiveRecord::RecordNotUnique do
+        render json: { error: "既に登録されています。" }, status: :conflict
+      end
+
       private
 
       def current_user

@@ -4,6 +4,8 @@ import { Signup } from './pages/Signup'
 import { Home } from './pages/Home'
 import { Workspaces } from './pages/Workspaces'
 import { WorkspaceDetail } from './pages/WorkspaceDetail'
+import { Channels } from './pages/Channels'
+import { ChannelDetail } from './pages/ChannelDetail'
 import { ProtectedRoute } from './components/ProtectedRoute'
 
 export default function App() {
@@ -32,6 +34,22 @@ export default function App() {
         element={
           <ProtectedRoute>
             <WorkspaceDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/workspaces/:workspaceId/channels"
+        element={
+          <ProtectedRoute>
+            <Channels />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/workspaces/:workspaceId/channels/:channelId"
+        element={
+          <ProtectedRoute>
+            <ChannelDetail />
           </ProtectedRoute>
         }
       />
