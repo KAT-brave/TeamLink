@@ -109,3 +109,19 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* チャンネルの公開/非公開バッジ(最小限) */
+.channel-badge {
+  display: inline-block;
+  margin: 0 6px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  border: 1px solid currentColor;
+}
+.channel-badge[data-kind='private'] {
+  color: #b45309;
+}
+.channel-badge[data-kind='public'] {
+  color: #2563eb;
+}
