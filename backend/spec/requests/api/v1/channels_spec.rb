@@ -103,6 +103,15 @@ RSpec.describe "Api::V1::Channels", type: :request do
       }.not_to change(Channel, :count)
       expect(response).to have_http_status(:unprocessable_content)
     end
+
+    it "ChannelMembership作成時にRecordNotUniqueが発生すると409" do
+      login_as(creator)
+      allow_any_instance_of(ChannelMembership).to receive(:save!)
+        .and_raise(ActiveRecord::RecordNotUnique.new('duplicate key value violates unique constraint'))
+      post base, params: { channel: { name: "Unique", kind: "public" } }, as: :json
+      expect(response).to have_http_status(:conflict)
+      expect(JSON.parse(response.body)).to eq({ "error" => "既に登録されています。" })
+    end
   end
 
   describe "GET index" do

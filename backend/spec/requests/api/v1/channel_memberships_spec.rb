@@ -72,6 +72,16 @@ RSpec.describe "Api::V1::ChannelMemberships", type: :request do
       post "#{ch_base(private_channel)}/join"
       expect(response).to have_http_status(:not_found)
     end
+
+    it "参加時にRecordNotUniqueが発生すると409" do
+      channel = public_channel
+      login_as(member)
+      allow_any_instance_of(ChannelMembership).to receive(:save!)
+        .and_raise(ActiveRecord::RecordNotUnique.new('duplicate key value violates unique constraint'))
+      post "#{ch_base(channel)}/join"
+      expect(response).to have_http_status(:conflict)
+      expect(JSON.parse(response.body)).to eq({ "error" => "既に登録されています。" })
+    end
   end
 
   describe "DELETE members/me (退出)" do
@@ -143,6 +153,16 @@ RSpec.describe "Api::V1::ChannelMemberships", type: :request do
       login_as(creator)
       post "#{ch_base(private_channel)}/members", params: { user_id: member.id }, as: :json
       expect(response).to have_http_status(:conflict)
+    end
+
+    it "招待時にRecordNotUniqueが発生すると409" do
+      channel = private_channel
+      login_as(creator)
+      allow_any_instance_of(ChannelMembership).to receive(:save!)
+        .and_raise(ActiveRecord::RecordNotUnique.new('duplicate key value violates unique constraint'))
+      post "#{ch_base(channel)}/members", params: { user_id: member.id }, as: :json
+      expect(response).to have_http_status(:conflict)
+      expect(JSON.parse(response.body)).to eq({ "error" => "既に登録されています。" })
     end
   end
 
