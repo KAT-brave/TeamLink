@@ -7,6 +7,7 @@ class Channel < ApplicationRecord
   belongs_to :created_by, class_name: "User"
   has_many :channel_memberships, dependent: :destroy
   has_many :members, through: :channel_memberships, source: :user
+  has_many :channel_read_statuses, dependent: :destroy
   has_many :messages, dependent: :destroy
 
   before_validation :normalize_name
@@ -19,6 +20,16 @@ class Channel < ApplicationRecord
 
   def membership_for(user)
     channel_memberships.find_by(user_id: user&.id)
+  end
+
+  def unread_count(user)
+    return 0 unless user
+
+    read_status = channel_read_statuses.find_by(user_id: user.id)
+    return 0 unless read_status
+
+    last_read_id = read_status.last_read_message_id || 0
+    messages.where("id > ? AND user_id != ?", last_read_id, user.id).count
   end
 
   def public_attributes
