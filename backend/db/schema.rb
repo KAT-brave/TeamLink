@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_22_135752) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_25_141851) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -35,6 +35,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_135752) do
     t.index "workspace_id, lower((name)::text)", name: "index_channels_on_workspace_id_and_lower_name", unique: true
     t.index ["created_by_id"], name: "index_channels_on_created_by_id"
     t.index ["workspace_id"], name: "index_channels_on_workspace_id"
+  end
+
+  create_table "messages", force: :cascade do |t|
+    t.text "body", null: false
+    t.bigint "channel_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["channel_id", "created_at"], name: "index_messages_on_channel_id_and_created_at"
+    t.index ["channel_id"], name: "index_messages_on_channel_id"
+    t.index ["user_id"], name: "index_messages_on_user_id"
   end
 
   create_table "users", force: :cascade do |t|
@@ -71,6 +82,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_135752) do
   add_foreign_key "channel_memberships", "users"
   add_foreign_key "channels", "users", column: "created_by_id"
   add_foreign_key "channels", "workspaces"
+  add_foreign_key "messages", "channels"
+  add_foreign_key "messages", "users"
   add_foreign_key "workspace_memberships", "users"
   add_foreign_key "workspace_memberships", "workspaces"
   add_foreign_key "workspaces", "users", column: "owner_id"
