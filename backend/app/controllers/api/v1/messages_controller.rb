@@ -29,6 +29,7 @@ module Api
 
         message = @channel.messages.new(create_params.merge(user: current_user))
         if message.save
+          broadcast_message_created(message)
           render json: { message: message_json(message) }, status: :created
         else
           render json: { errors: message.errors.messages }, status: :unprocessable_entity
@@ -42,6 +43,7 @@ module Api
         end
 
         if @message.update(update_params)
+          broadcast_message_updated(@message)
           render json: { message: message_json(@message) }
         else
           render json: { errors: @message.errors.messages }, status: :unprocessable_entity
@@ -54,8 +56,15 @@ module Api
           return render_forbidden
         end
 
-        @message.destroy
-        head :no_content
+        message_id = @message.id
+        channel_id = @message.channel_id
+
+        if @message.destroy
+          broadcast_message_deleted(message_id, channel_id)
+          head :no_content
+        else
+          render json: { errors: @message.errors.messages }, status: :unprocessable_entity
+        end
       end
 
       private
@@ -77,6 +86,40 @@ module Api
         message.public_attributes.merge(
           can_edit: message.user_id == current_user.id,
           can_delete: message.user_id == current_user.id
+        )
+      end
+
+      def message_broadcast_json(message)
+        message.public_attributes
+      end
+
+      def broadcast_message_created(message)
+        channel = message.channel
+        MessageChannel.broadcast_to(
+          channel,
+          type: "message_created",
+          message: message_broadcast_json(message)
+        )
+      end
+
+      def broadcast_message_updated(message)
+        channel = message.channel
+        MessageChannel.broadcast_to(
+          channel,
+          type: "message_updated",
+          message: message_broadcast_json(message)
+        )
+      end
+
+      def broadcast_message_deleted(message_id, channel_id)
+        channel = Channel.find_by(id: channel_id)
+        return unless channel
+
+        MessageChannel.broadcast_to(
+          channel,
+          type: "message_deleted",
+          message_id: message_id,
+          channel_id: channel_id
         )
       end
 

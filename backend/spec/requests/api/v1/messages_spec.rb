@@ -379,4 +379,314 @@ RSpec.describe "Api::V1::Messages", type: :request do
       expect(Message.exists?(msg.id)).to be(false)
     end
   end
+
+  describe "destroy レスポンス" do
+    it "成功時に204 No Content を返す" do
+      msg = create(:message, channel: public_channel, user: member, body: "delete me")
+      login_as(member)
+      delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+      expect(response).to have_http_status(:no_content)
+    end
+
+    it "失敗時に422 Unprocessable Entity を返す" do
+      msg = create(:message, channel: public_channel, user: member, body: "delete me")
+      login_as(member)
+      allow_any_instance_of(Message).to receive(:destroy).and_return(false)
+      delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+      expect(response).to have_http_status(:unprocessable_entity)
+      data = JSON.parse(response.body)
+      expect(data).to have_key("errors")
+    end
+
+    it "destroy失敗時はメッセージが削除されない" do
+      msg = create(:message, channel: public_channel, user: member, body: "delete me")
+      login_as(member)
+      allow_any_instance_of(Message).to receive(:destroy).and_return(false)
+      delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+      expect(Message.exists?(msg.id)).to be(true)
+    end
+  end
+
+  describe "WebSocket broadcast" do
+    describe "message_created broadcast" do
+      it "成功時に対象チャンネルへ1回broadcast" do
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(type: "message_created")
+        )
+      end
+
+      it "broadcastのtypeが message_created" do
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(type: "message_created")
+        )
+      end
+
+      it "broadcastに message.id が含まれる" do
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(
+            type: "message_created",
+            message: hash_including(:id, :body, :user)
+          )
+        )
+      end
+
+      it "broadcastに message.channel_id が含まれる" do
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(
+            message: hash_including(channel_id: public_channel.id)
+          )
+        )
+      end
+
+      it "broadcastに message.body が含まれる" do
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test body" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(
+            message: hash_including(body: "test body")
+          )
+        )
+      end
+
+      it "broadcastに can_edit が含まれない" do
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(message: hash_excluding(:can_edit))
+        )
+      end
+
+      it "broadcastに can_delete が含まれない" do
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(message: hash_excluding(:can_delete))
+        )
+      end
+
+      it "別チャンネルにはbroadcastされない" do
+        other_ch = create(:channel, workspace:, created_by: member, kind: :public)
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(other_ch))
+      end
+    end
+
+    describe "作成失敗時のbroadcast" do
+      it "空文字422時はbroadcastなし" do
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "" } }, as: :json
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel))
+      end
+
+      it "5001文字422時はbroadcastなし" do
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "a" * 5001 } }, as: :json
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel))
+      end
+
+      it "非公開チャンネル未参加で403時はbroadcastなし" do
+        login_as(other)
+        expect do
+          post "#{base}/#{private_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(private_channel))
+      end
+
+      it "非公開チャンネル未参加で404時はbroadcastなし" do
+        login_as(other)
+        expect do
+          post "#{base}/#{private_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(private_channel))
+      end
+    end
+
+    describe "message_updated broadcast" do
+      it "成功時に対象チャンネルへ1回broadcast" do
+        msg = create(:message, channel: public_channel, user: member, body: "original")
+        login_as(member)
+        expect do
+          patch "#{base}/#{public_channel.id}/messages/#{msg.id}", params: { message: { body: "updated" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(type: "message_updated")
+        )
+      end
+
+      it "broadcastの更新後bodyが含まれる" do
+        msg = create(:message, channel: public_channel, user: member, body: "original")
+        login_as(member)
+        expect do
+          patch "#{base}/#{public_channel.id}/messages/#{msg.id}", params: { message: { body: "updated body" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(
+            message: hash_including(body: "updated body")
+          )
+        )
+      end
+
+      it "broadcastに can_edit が含まれない" do
+        msg = create(:message, channel: public_channel, user: member, body: "original")
+        login_as(member)
+        expect do
+          patch "#{base}/#{public_channel.id}/messages/#{msg.id}", params: { message: { body: "updated" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(message: hash_excluding(:can_edit))
+        )
+      end
+
+      it "broadcastに can_delete が含まれない" do
+        msg = create(:message, channel: public_channel, user: member, body: "original")
+        login_as(member)
+        expect do
+          patch "#{base}/#{public_channel.id}/messages/#{msg.id}", params: { message: { body: "updated" } }, as: :json
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(message: hash_excluding(:can_delete))
+        )
+      end
+
+      it "別チャンネルにはbroadcastされない" do
+        msg = create(:message, channel: public_channel, user: member, body: "original")
+        other_ch = create(:channel, workspace:, created_by: member, kind: :public)
+        login_as(member)
+        expect do
+          patch "#{base}/#{public_channel.id}/messages/#{msg.id}", params: { message: { body: "updated" } }, as: :json
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(other_ch))
+      end
+    end
+
+    describe "更新失敗時のbroadcast" do
+      it "空文字422時はbroadcastなし" do
+        msg = create(:message, channel: public_channel, user: member, body: "original")
+        login_as(member)
+        expect do
+          patch "#{base}/#{public_channel.id}/messages/#{msg.id}", params: { message: { body: "" } }, as: :json
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel))
+      end
+
+      it "他人のメッセージ編集403時はbroadcastなし" do
+        msg = create(:message, channel: public_channel, user: member, body: "original")
+        login_as(other)
+        expect do
+          patch "#{base}/#{public_channel.id}/messages/#{msg.id}", params: { message: { body: "hacked" } }, as: :json
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel))
+      end
+
+      it "別チャンネルのmessage_id404時はbroadcastなし" do
+        msg = create(:message, channel: public_channel, user: member, body: "original")
+        other_ch = create(:channel, workspace:, created_by: member, kind: :public)
+        login_as(member)
+        expect do
+          patch "#{base}/#{other_ch.id}/messages/#{msg.id}", params: { message: { body: "hacked" } }, as: :json
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(other_ch))
+      end
+
+      it "存在しないmessage_id404時はbroadcastなし" do
+        login_as(member)
+        expect do
+          patch "#{base}/#{public_channel.id}/messages/999999", params: { message: { body: "fake" } }, as: :json
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel))
+      end
+    end
+
+    describe "message_deleted broadcast" do
+      it "成功時に対象チャンネルへ1回broadcast" do
+        msg = create(:message, channel: public_channel, user: member, body: "delete me")
+        login_as(member)
+        expect do
+          delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(type: "message_deleted")
+        )
+      end
+
+      it "broadcastに message_id が含まれる" do
+        msg = create(:message, channel: public_channel, user: member, body: "delete me")
+        login_as(member)
+        expect do
+          delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(message_id: msg.id)
+        )
+      end
+
+      it "broadcastに channel_id が含まれる" do
+        msg = create(:message, channel: public_channel, user: member, body: "delete me")
+        login_as(member)
+        expect do
+          delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+        end.to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel)).with(
+          hash_including(channel_id: public_channel.id)
+        )
+      end
+
+      it "別チャンネルにはbroadcastされない" do
+        msg = create(:message, channel: public_channel, user: member, body: "delete me")
+        other_ch = create(:channel, workspace:, created_by: member, kind: :public)
+        login_as(member)
+        expect do
+          delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(other_ch))
+      end
+    end
+
+    describe "destroy失敗時のbroadcast" do
+      it "destroy失敗時（stubで false）はbroadcastなし" do
+        msg = create(:message, channel: public_channel, user: member, body: "delete me")
+        login_as(member)
+        allow_any_instance_of(Message).to receive(:destroy).and_return(false)
+        expect do
+          delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel))
+      end
+
+      it "destroy失敗時は422レスポンス" do
+        msg = create(:message, channel: public_channel, user: member, body: "delete me")
+        login_as(member)
+        allow_any_instance_of(Message).to receive(:destroy).and_return(false)
+        delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+
+      it "他人の削除403時はbroadcastなし" do
+        msg = create(:message, channel: public_channel, user: member, body: "delete me")
+        login_as(other)
+        expect do
+          delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel))
+      end
+
+      it "別チャンネル404時はbroadcastなし" do
+        msg = create(:message, channel: public_channel, user: member, body: "delete me")
+        other_ch = create(:channel, workspace:, created_by: member, kind: :public)
+        login_as(member)
+        expect do
+          delete "#{base}/#{other_ch.id}/messages/#{msg.id}"
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(other_ch))
+      end
+
+      it "存在しないメッセージ404時はbroadcastなし" do
+        login_as(member)
+        expect do
+          delete "#{base}/#{public_channel.id}/messages/999999"
+        end.not_to have_broadcasted_to(MessageChannel.broadcasting_for(public_channel))
+      end
+    end
+  end
 end

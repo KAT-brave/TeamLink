@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { ChannelDetail } from '../ChannelDetail'
@@ -9,12 +9,14 @@ import * as messageApi from '../../api/messages'
 import type { Message } from '../../api/messages'
 import * as wsApi from '../../api/workspaces'
 import * as authStore from '../../store/auth'
+import * as cableApi from '../../api/cable'
 import { ApiError } from '../../api/client'
 
 vi.mock('../../api/channels')
 vi.mock('../../api/messages')
 vi.mock('../../api/workspaces')
 vi.mock('../../store/auth')
+vi.mock('../../api/cable')
 
 const CURRENT_USER = { id: 1, name: 'Alice', email: 'a@example.com' }
 
@@ -520,6 +522,290 @@ describe('ChannelDetail', () => {
       expect(screen.queryByText('Message 1')).not.toBeInTheDocument()
       expect(screen.getByText('Message 2')).toBeInTheDocument()
       expect(screen.getByText('Message 3')).toBeInTheDocument()
+    })
+  })
+
+  describe('WebSocket購読', () => {
+    it('ChannelDetail表示時にMessageChannelを購読する', async () => {
+      const mockSubscription = { unsubscribe: vi.fn() }
+      vi.mocked(cableApi.subscribeToMessages).mockReturnValue(mockSubscription as any)
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel())
+
+      renderDetail()
+      await screen.findByRole('heading', { name: 'general' })
+
+      expect(cableApi.subscribeToMessages).toHaveBeenCalledWith(
+        { channel: 'MessageChannel', channel_id: 3 },
+        expect.objectContaining({ received: expect.any(Function) }),
+      )
+    })
+
+    it('unmount時にunsubscribeする', async () => {
+      const mockSubscription = { unsubscribe: vi.fn() }
+      vi.mocked(cableApi.subscribeToMessages).mockReturnValue(mockSubscription as any)
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel())
+
+      const { unmount } = render(
+        <MemoryRouter initialEntries={['/workspaces/10/channels/3']}>
+          <Routes>
+            <Route path="/workspaces/:workspaceId/channels/:channelId" element={<ChannelDetail />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+      await screen.findByRole('heading', { name: 'general' })
+      unmount()
+      expect(mockSubscription.unsubscribe).toHaveBeenCalled()
+    })
+
+    it('cleanup時に購読を完全に解除する', async () => {
+      const mockSub = { unsubscribe: vi.fn() }
+      vi.mocked(cableApi.subscribeToMessages).mockReturnValue(mockSub as any)
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel())
+
+      const { unmount } = render(
+        <MemoryRouter initialEntries={['/workspaces/10/channels/3']}>
+          <Routes>
+            <Route path="/workspaces/:workspaceId/channels/:channelId" element={<ChannelDetail />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+      await screen.findByRole('heading', { name: 'general' })
+      expect(cableApi.subscribeToMessages).toHaveBeenCalledTimes(1)
+
+      unmount()
+      expect(mockSub.unsubscribe).toHaveBeenCalledTimes(1)
+    })
+
+    it('message_createdイベント受信時に対象channelIdのメッセージを追加', async () => {
+      const mockSubscription = { unsubscribe: vi.fn() }
+      let receivedHandler: Function
+      vi.mocked(cableApi.subscribeToMessages).mockImplementation((_params, handlers) => {
+        receivedHandler = handlers.received!
+        return mockSubscription as any
+      })
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel())
+      vi.mocked(messageApi.getMessages).mockResolvedValue([
+        makeMessage({ id: 100, body: 'Existing' }),
+      ])
+
+      renderDetail()
+      await screen.findByText('Existing')
+
+      const newMessage = makeMessage({
+        id: 101,
+        body: 'New message',
+        user: { id: 2, name: 'Bob', email: 'b@example.com' },
+      })
+      receivedHandler!({
+        type: 'message_created',
+        message: newMessage,
+        channel_id: 3,
+      })
+
+      expect(await screen.findByText('New message')).toBeInTheDocument()
+    })
+
+    it('message_createdイベント受信時に対象外channelIdは無視', async () => {
+      const mockSubscription = { unsubscribe: vi.fn() }
+      let receivedHandler: Function
+      vi.mocked(cableApi.subscribeToMessages).mockImplementation((_params, handlers) => {
+        receivedHandler = handlers.received!
+        return mockSubscription as any
+      })
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel())
+      vi.mocked(messageApi.getMessages).mockResolvedValue([
+        makeMessage({ id: 100, body: 'Existing' }),
+      ])
+
+      renderDetail()
+      await screen.findByText('Existing')
+
+      receivedHandler!({
+        type: 'message_created',
+        message: makeMessage({ id: 101, body: 'Other channel' }),
+        channel_id: 999,
+      })
+
+      expect(screen.queryByText('Other channel')).not.toBeInTheDocument()
+    })
+
+    it('message_createdイベント受信時に受信者本人なら can_edit、can_deleteは付与される', async () => {
+      const mockSubscription = { unsubscribe: vi.fn() }
+      let receivedHandler: Function
+      vi.mocked(cableApi.subscribeToMessages).mockImplementation((_params, handlers) => {
+        receivedHandler = handlers.received!
+        return mockSubscription as any
+      })
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel())
+      vi.mocked(messageApi.getMessages).mockResolvedValue([])
+
+      renderDetail()
+      await screen.findByRole('heading', { name: 'general' })
+
+      const newMessage = makeMessage({
+        id: 101,
+        body: 'My message',
+        user: CURRENT_USER,
+        can_edit: false,
+        can_delete: false,
+      })
+      receivedHandler!({
+        type: 'message_created',
+        message: newMessage,
+        channel_id: 3,
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('My message')).toBeInTheDocument()
+      })
+    })
+
+    it('message_createdイベント受信時に他人なら can_edit、can_deleteは false', async () => {
+      const mockSubscription = { unsubscribe: vi.fn() }
+      let receivedHandler: Function
+      vi.mocked(cableApi.subscribeToMessages).mockImplementation((_params, handlers) => {
+        receivedHandler = handlers.received!
+        return mockSubscription as any
+      })
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel())
+      vi.mocked(messageApi.getMessages).mockResolvedValue([])
+
+      renderDetail()
+      await screen.findByRole('heading', { name: 'general' })
+
+      const newMessage = makeMessage({
+        id: 101,
+        body: 'Others message',
+        user: { id: 2, name: 'Bob', email: 'b@example.com' },
+        can_edit: false,
+        can_delete: false,
+      })
+      receivedHandler!({
+        type: 'message_created',
+        message: newMessage,
+        channel_id: 3,
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Others message')).toBeInTheDocument()
+      })
+    })
+
+    it('message_updatedイベント受信時に対象メッセージだけ更新', async () => {
+      const mockSubscription = { unsubscribe: vi.fn() }
+      let receivedHandler: Function
+      vi.mocked(cableApi.subscribeToMessages).mockImplementation((_params, handlers) => {
+        receivedHandler = handlers.received!
+        return mockSubscription as any
+      })
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel())
+      vi.mocked(messageApi.getMessages).mockResolvedValue([
+        makeMessage({ id: 100, body: 'Old content' }),
+        makeMessage({ id: 101, body: 'Other message' }),
+      ])
+
+      renderDetail()
+      await screen.findByText('Old content')
+
+      receivedHandler!({
+        type: 'message_updated',
+        message: makeMessage({ id: 100, body: 'Updated content' }),
+        channel_id: 3,
+      })
+
+      await waitFor(() => {
+        expect(screen.queryByText('Old content')).not.toBeInTheDocument()
+        expect(screen.getByText('Updated content')).toBeInTheDocument()
+        expect(screen.getByText('Other message')).toBeInTheDocument()
+      })
+    })
+
+    it('message_deletedイベント受信時に対象メッセージだけ削除', async () => {
+      const mockSubscription = { unsubscribe: vi.fn() }
+      let receivedHandler: Function
+      vi.mocked(cableApi.subscribeToMessages).mockImplementation((_params, handlers) => {
+        receivedHandler = handlers.received!
+        return mockSubscription as any
+      })
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel())
+      vi.mocked(messageApi.getMessages).mockResolvedValue([
+        makeMessage({ id: 100, body: 'Message 1' }),
+        makeMessage({ id: 101, body: 'Message 2' }),
+      ])
+
+      renderDetail()
+      await screen.findByText('Message 1')
+
+      receivedHandler!({
+        type: 'message_deleted',
+        message_id: 100,
+        channel_id: 3,
+      })
+
+      await waitFor(() => {
+        expect(screen.queryByText('Message 1')).not.toBeInTheDocument()
+        expect(screen.getByText('Message 2')).toBeInTheDocument()
+      })
+    })
+
+    it('message_deletedイベント受信時に対象外channelIdは無視', async () => {
+      const mockSubscription = { unsubscribe: vi.fn() }
+      let receivedHandler: Function
+      vi.mocked(cableApi.subscribeToMessages).mockImplementation((_params, handlers) => {
+        receivedHandler = handlers.received!
+        return mockSubscription as any
+      })
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel())
+      vi.mocked(messageApi.getMessages).mockResolvedValue([
+        makeMessage({ id: 100, body: 'Keep this' }),
+      ])
+
+      renderDetail()
+      await screen.findByText('Keep this')
+
+      receivedHandler!({
+        type: 'message_deleted',
+        message_id: 100,
+        channel_id: 999,
+      })
+
+      expect(screen.getByText('Keep this')).toBeInTheDocument()
+    })
+
+    it('HTTPレスポンスとbroadcast両方受信しても重複しない', async () => {
+      const mockSubscription = { unsubscribe: vi.fn() }
+      let receivedHandler: Function
+      vi.mocked(cableApi.subscribeToMessages).mockImplementation((_params, handlers) => {
+        receivedHandler = handlers.received!
+        return mockSubscription as any
+      })
+      vi.mocked(api.getChannel).mockResolvedValue(makeChannel({ joined: true }))
+      vi.mocked(messageApi.getMessages).mockResolvedValue([])
+
+      renderDetail()
+      await screen.findByRole('heading', { name: 'general' })
+
+      const newMsg = makeMessage({ id: 101, body: 'Test' })
+      vi.mocked(messageApi.createMessage).mockResolvedValue(newMsg)
+
+      const user = userEvent.setup()
+      const textarea = screen.getByPlaceholderText('メッセージを入力...')
+      await user.type(textarea, 'Test')
+      await user.click(screen.getByRole('button', { name: '送信' }))
+
+      // HTTPレスポンスで追加
+      expect(await screen.findByText('Test')).toBeInTheDocument()
+
+      // 同じIDでbroadcast受信
+      receivedHandler!({
+        type: 'message_created',
+        message: newMsg,
+        channel_id: 3,
+      })
+
+      // 重複しないことを確認
+      const allTestMessages = screen.getAllByText('Test')
+      expect(allTestMessages.length).toBe(1)
     })
   })
 })
