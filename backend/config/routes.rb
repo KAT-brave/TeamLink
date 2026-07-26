@@ -22,6 +22,8 @@ Rails.application.routes.draw do
         post "invite_code", to: "workspace_invite_codes#create"
 
         resources :channels, only: %i[index show create update destroy] do
+          resources :messages, only: %i[index create update destroy]
+
           post "join", to: "channel_memberships#join"
           # members/me を :user_id より前に定義(動的パラメータ化を防止)
           delete "members/me", to: "channel_memberships#leave"

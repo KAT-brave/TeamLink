@@ -7,6 +7,7 @@ class Channel < ApplicationRecord
   belongs_to :created_by, class_name: "User"
   has_many :channel_memberships, dependent: :destroy
   has_many :members, through: :channel_memberships, source: :user
+  has_many :messages, dependent: :destroy
 
   before_validation :normalize_name
 

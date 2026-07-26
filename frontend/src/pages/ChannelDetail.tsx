@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import * as api from '../api/channels'
 import type { Channel, ChannelMember } from '../api/channels'
+import * as messageApi from '../api/messages'
+import type { Message } from '../api/messages'
 import { listMembers as listWorkspaceMembers } from '../api/workspaces'
 import type { Member as WorkspaceMember } from '../api/workspaces'
 import { useAuth } from '../store/auth'
@@ -30,6 +32,14 @@ export function ChannelDetail() {
   const [notFound, setNotFound] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  const [messages, setMessages] = useState<Message[]>([])
+  const [messageLoading, setMessageLoading] = useState(false)
+  const [messageError, setMessageError] = useState<string | null>(null)
+  const [messageBody, setMessageBody] = useState('')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editBody, setEditBody] = useState('')
+  const [messageSubmitting, setMessageSubmitting] = useState(false)
+
   async function loadCandidates(ch: Channel, currentMembers: ChannelMember[]) {
     if (ch.kind !== 'private' || !ch.can_manage) {
       setCandidates([])
@@ -38,6 +48,19 @@ export function ChannelDetail() {
     const wsMembers = await listWorkspaceMembers(workspaceId)
     const memberIds = new Set(currentMembers.map((m) => m.user.id))
     setCandidates(wsMembers.filter((m) => !memberIds.has(m.user.id) && m.user.id !== user?.id))
+  }
+
+  async function loadMessages() {
+    setMessageLoading(true)
+    setMessageError(null)
+    try {
+      const msgs = await messageApi.getMessages(workspaceId, channelId)
+      setMessages(msgs)
+    } catch (err) {
+      setMessageError(err instanceof ApiError ? err.message : 'メッセージ読み込みに失敗しました。')
+    } finally {
+      setMessageLoading(false)
+    }
   }
 
   async function load() {
@@ -51,6 +74,7 @@ export function ChannelDetail() {
       const mem = await api.listChannelMembers(workspaceId, channelId)
       setMembers(mem)
       await loadCandidates(ch, mem)
+      await loadMessages()
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setNotFound(true)
@@ -145,6 +169,71 @@ export function ChannelDetail() {
     }
   }
 
+  async function handleCreateMessage(e: FormEvent) {
+    e.preventDefault()
+    setMessageError(null)
+    if (!channel?.joined) return
+    if (messageSubmitting) return
+    const trimmedBody = messageBody.trim()
+    if (trimmedBody.length === 0) return
+
+    setMessageSubmitting(true)
+    try {
+      const newMessage = await messageApi.createMessage(workspaceId, channelId, messageBody)
+      setMessages((currentMessages) => {
+        if (currentMessages.some((message) => message.id === newMessage.id)) {
+          return currentMessages
+        }
+        return [...currentMessages, newMessage]
+      })
+      setMessageBody('')
+    } catch (err) {
+      setMessageError(err instanceof ApiError ? err.message : 'メッセージ投稿に失敗しました。')
+    } finally {
+      setMessageSubmitting(false)
+    }
+  }
+
+  async function handleUpdateMessage(messageId: number, e: FormEvent) {
+    e.preventDefault()
+    setMessageError(null)
+    if (messageSubmitting) return
+    const trimmedBody = editBody.trim()
+    if (trimmedBody.length === 0) return
+
+    setMessageSubmitting(true)
+    try {
+      const updatedMessage = await messageApi.updateMessage(workspaceId, channelId, messageId, editBody)
+      setMessages((currentMessages) =>
+        currentMessages.map((m) => (m.id === messageId ? updatedMessage : m))
+      )
+      setEditingId(null)
+      setEditBody('')
+    } catch (err) {
+      setMessageError(err instanceof ApiError ? err.message : 'メッセージ編集に失敗しました。')
+    } finally {
+      setMessageSubmitting(false)
+    }
+  }
+
+  async function handleDeleteMessage(messageId: number) {
+    setMessageError(null)
+    if (!window.confirm('このメッセージを削除しますか？')) return
+    if (messageSubmitting) return
+
+    setMessageSubmitting(true)
+    try {
+      await messageApi.deleteMessage(workspaceId, channelId, messageId)
+      setMessages((currentMessages) =>
+        currentMessages.filter((m) => m.id !== messageId)
+      )
+    } catch (err) {
+      setMessageError(err instanceof ApiError ? err.message : 'メッセージ削除に失敗しました。')
+    } finally {
+      setMessageSubmitting(false)
+    }
+  }
+
   if (loading) return <p>読み込み中...</p>
   if (notFound) {
     return <p role="alert">チャンネルが存在しない、または閲覧権限がありません。</p>
@@ -217,6 +306,104 @@ export function ChannelDetail() {
             <li key={m.id}>{m.user.name}</li>
           ))}
         </ul>
+      </section>
+
+      <section className="messages-section">
+        <h2>メッセージ</h2>
+        {messageError && <p role="alert" className="message-error">{messageError}</p>}
+        {messageLoading ? (
+          <p>メッセージを読み込み中...</p>
+        ) : messages.length === 0 ? (
+          <p className="no-messages">まだメッセージはありません。</p>
+        ) : (
+          <div className="messages-list">
+            {messages.map((msg) => (
+              <div key={msg.id} className="message-item">
+                {editingId === msg.id ? (
+                  <form onSubmit={(e) => handleUpdateMessage(msg.id, e)} className="edit-form">
+                    <textarea
+                      value={editBody}
+                      onChange={(e) => setEditBody(e.target.value)}
+                      maxLength={5000}
+                      rows={3}
+                    />
+                    <div className="form-actions">
+                      <button type="submit" disabled={messageSubmitting}>
+                        保存
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingId(null)
+                          setEditBody('')
+                        }}
+                        disabled={messageSubmitting}
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <div className="message-header">
+                      <strong>{msg.user.name}</strong>
+                      <span className="message-date">
+                        {new Date(msg.created_at).toLocaleString('ja-JP', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                      {msg.is_edited && <span className="message-edited">（編集済み）</span>}
+                    </div>
+                    <div className="message-body">{msg.body}</div>
+                    <div className="message-actions">
+                      {msg.can_edit && (
+                        <button
+                          onClick={() => {
+                            setEditingId(msg.id)
+                            setEditBody(msg.body)
+                          }}
+                          disabled={messageSubmitting}
+                        >
+                          編集
+                        </button>
+                      )}
+                      {msg.can_delete && (
+                        <button
+                          onClick={() => handleDeleteMessage(msg.id)}
+                          disabled={messageSubmitting}
+                        >
+                          削除
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {channel.joined && (
+          <form onSubmit={handleCreateMessage} className="message-form">
+            <textarea
+              value={messageBody}
+              onChange={(e) => setMessageBody(e.target.value)}
+              placeholder="メッセージを入力..."
+              maxLength={5000}
+              rows={3}
+            />
+            <button type="submit" disabled={messageSubmitting || messageBody.trim().length === 0}>
+              送信
+            </button>
+          </form>
+        )}
+        {!channel.joined && (
+          <p className="message-info">チャンネルに参加するとメッセージを投稿できます。</p>
+        )}
       </section>
 
       {channel.kind === 'private' && channel.can_manage && (
