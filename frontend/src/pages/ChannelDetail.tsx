@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, useRef, type FormEvent } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import * as api from '../api/channels'
 import type { Channel, ChannelMember } from '../api/channels'
@@ -8,6 +8,13 @@ import { listMembers as listWorkspaceMembers } from '../api/workspaces'
 import type { Member as WorkspaceMember } from '../api/workspaces'
 import { useAuth } from '../store/auth'
 import { ApiError } from '../api/client'
+import { subscribeToMessages } from '../api/cable'
+import {
+  isMessageCreatedEvent,
+  isMessageUpdatedEvent,
+  isMessageDeletedEvent,
+} from '../types/messageEvents'
+import type { Subscription } from '@rails/actioncable'
 
 // チャンネル詳細。編集/参加/退出/招待/削除を権限に応じて出し分ける。
 // (表示制御はUX目的。権限判定の正はバックエンド)
@@ -39,6 +46,48 @@ export function ChannelDetail() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editBody, setEditBody] = useState('')
   const [messageSubmitting, setMessageSubmitting] = useState(false)
+
+  const subscriptionRef = useRef<Subscription | null>(null)
+
+  function withPermissions(message: Omit<Message, 'can_edit' | 'can_delete'>): Message {
+    const canManage = user && message.user.id === user.id
+    return {
+      ...message,
+      can_edit: !!canManage,
+      can_delete: !!canManage,
+    }
+  }
+
+  function handleMessageEvent(data: unknown) {
+    if (isMessageCreatedEvent(data)) {
+      // 対象チャンネル以外は無視
+      if (data.channel_id !== channelId) return
+
+      const messageWithPerms = withPermissions(data.message)
+      setMessages((currentMessages) => {
+        const existingIndex = currentMessages.findIndex((msg) => msg.id === messageWithPerms.id)
+        if (existingIndex >= 0) {
+          return currentMessages.map((msg) => (msg.id === messageWithPerms.id ? messageWithPerms : msg))
+        }
+        return [...currentMessages, messageWithPerms]
+      })
+    } else if (isMessageUpdatedEvent(data)) {
+      // 対象チャンネル以外は無視
+      if (data.channel_id !== channelId) return
+
+      const messageWithPerms = withPermissions(data.message)
+      setMessages((currentMessages) =>
+        currentMessages.map((msg) => (msg.id === messageWithPerms.id ? messageWithPerms : msg)),
+      )
+    } else if (isMessageDeletedEvent(data)) {
+      // 対象チャンネル以外は無視
+      if (data.channel_id !== channelId) return
+
+      setMessages((currentMessages) =>
+        currentMessages.filter((msg) => msg.id !== data.message_id),
+      )
+    }
+  }
 
   async function loadCandidates(ch: Channel, currentMembers: ChannelMember[]) {
     if (ch.kind !== 'private' || !ch.can_manage) {
@@ -87,7 +136,33 @@ export function ChannelDetail() {
   }
 
   useEffect(() => {
+    // チャンネル切り替え時に古い購読を解除
+    if (subscriptionRef.current) {
+      subscriptionRef.current.unsubscribe()
+      subscriptionRef.current = null
+    }
+
     load()
+
+    // 新しい購読を開始
+    subscriptionRef.current = subscribeToMessages(
+      { channel: 'MessageChannel', channel_id: channelId },
+      {
+        received: handleMessageEvent,
+        connected: () => {
+          // 再接続時にメッセージを再取得して欠落を防ぐ
+          loadMessages()
+        },
+      },
+    )
+
+    // cleanup: unmount時に購読を解除
+    return () => {
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe()
+        subscriptionRef.current = null
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, channelId])
 
