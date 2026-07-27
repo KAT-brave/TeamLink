@@ -15,10 +15,18 @@ RSpec.describe "Api::V1::ChannelReadStatuses", type: :request do
 
       it "認証済みユーザーのリクエストを受け入れる" do
         login_as(user)
+        m1 = create(:message, channel: channel)
         patch "/api/v1/workspaces/#{workspace.id}/channels/#{channel.id}/read"
-        # 実装が 404 を返す理由を特定中。ルートは存在するため、権限チェックが問題の可能性
-        # テストフレームワーク内での動作を確認
-        expect([ 200, 404 ]).to include(response.status)
+
+        expect(response).to have_http_status(:ok)
+
+        body = JSON.parse(response.body)
+        expect(body["read_status"]["channel_id"]).to eq(channel.id)
+        expect(body["read_status"]["last_read_message_id"]).to eq(m1.id)
+
+        read_status = ChannelReadStatus.find_by(channel: channel, user: user)
+        expect(read_status).to be_present
+        expect(read_status.last_read_message_id).to eq(m1.id)
       end
     end
 
@@ -61,29 +69,6 @@ RSpec.describe "Api::V1::ChannelReadStatuses", type: :request do
     end
 
     describe "RecordNotUnique処理（rescue動作）" do
-      it "Controller に ActiveRecord::RecordNotUnique の rescue が実装されている" do
-        controller_code = File.read(
-          Rails.root.join("app/controllers/api/v1/channel_read_statuses_controller.rb")
-        )
-        expect(controller_code).to include("rescue ActiveRecord::RecordNotUnique")
-      end
-
-      it "rescue ブロックで find_by による再取得が実装されている" do
-        controller_code = File.read(
-          Rails.root.join("app/controllers/api/v1/channel_read_statuses_controller.rb")
-        )
-        expect(controller_code).to include("find_by(user_id: current_user.id)")
-      end
-
-      it "rescue ブロックで既存レコード取得後に JSON レスポンスを返す" do
-        controller_code = File.read(
-          Rails.root.join("app/controllers/api/v1/channel_read_statuses_controller.rb")
-        )
-        # rescue ブロック内でのレスポンス生成を確認
-        expect(controller_code).to include("read_status = @channel.channel_read_statuses.find_by(user_id: current_user.id)")
-        expect(controller_code).to include("render json:")
-      end
-
       it "find_or_initialize_by は既存レコード存在時に返す" do
         # 最初のレコード作成
         original = ChannelReadStatus.create!(channel: channel, user: user, last_read_message_id: 100)
@@ -185,15 +170,24 @@ RSpec.describe "Api::V1::ChannelReadStatuses", type: :request do
         expect(retrieved.last_read_message_id).to eq(latest_id)
       end
 
-      it "rescue ブロックが nil チェックを実装している" do
-        # Controller コードの確認
-        controller_code = File.read(
-          Rails.root.join("app/controllers/api/v1/channel_read_statuses_controller.rb")
+      it "RecordNotUnique後の再取得でもレコードが見つからない場合は422を返す" do
+        login_as(user)
+        create(:message, channel: channel)
+
+        # 既存レコードが存在しない状態で save が RecordNotUnique を送出する
+        # （rescue 側の find_by も同じ理由で該当レコードを取得できない状況を再現）
+        allow_any_instance_of(ChannelReadStatus).to receive(:save).and_raise(
+          ActiveRecord::RecordNotUnique, "duplicate key value violates unique constraint"
         )
-        # rescue ブロック内で nil チェック、エラーハンドリング
-        expect(controller_code).to include("if read_status")
-        expect(controller_code).to include("errors")
-        expect(controller_code).to include("既読状態の取得に失敗しました")
+
+        patch "/api/v1/workspaces/#{workspace.id}/channels/#{channel.id}/read"
+
+        expect(response).to have_http_status(:unprocessable_entity)
+
+        body = JSON.parse(response.body)
+        expect(body["errors"]["base"]).to include("既読状態の取得に失敗しました")
+
+        expect(ChannelReadStatus.where(channel: channel, user: user).count).to eq(0)
       end
     end
 
