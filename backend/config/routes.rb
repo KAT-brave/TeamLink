@@ -23,6 +23,8 @@ Rails.application.routes.draw do
         get "invite_code", to: "workspace_invite_codes#show"
         post "invite_code", to: "workspace_invite_codes#create"
 
+        get "messages/search", to: "message_searches#show"
+
         resources :channels, only: %i[index show create update destroy] do
           resources :messages, only: %i[index create update destroy]
 
