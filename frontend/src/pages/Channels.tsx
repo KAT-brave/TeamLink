@@ -86,6 +86,11 @@ export function Channels() {
               <span className="channel-badge" data-kind={c.kind}>
                 {c.kind === 'private' ? '非公開' : '公開'}
               </span>
+              {c.unread_count > 0 && (
+                <span className="channel-unread-badge">
+                  {c.unread_count > 99 ? '99+' : c.unread_count}
+                </span>
+              )}
               {c.description && <span> — {c.description}</span>}
               {c.joined ? (
                 <span> ✓ 参加済み</span>

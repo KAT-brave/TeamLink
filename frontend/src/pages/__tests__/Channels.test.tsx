@@ -19,6 +19,7 @@ function makeChannel(over: Partial<Channel> = {}): Channel {
     created_by_id: 1,
     joined: false,
     can_manage: false,
+    unread_count: 0,
     ...over,
   }
 }
@@ -126,5 +127,76 @@ describe('Channels', () => {
     renderPage()
     await screen.findByText('secret')
     expect(screen.queryByRole('button', { name: '参加' })).not.toBeInTheDocument()
+  })
+
+  describe('未読バッジ', () => {
+    it('unread_countが0のときバッジを表示しない', async () => {
+      vi.mocked(api.listChannels).mockResolvedValue([
+        makeChannel({ id: 1, name: 'general', unread_count: 0 }),
+      ])
+      renderPage()
+      await screen.findByText('general')
+      expect(screen.getByText('general').closest('li')).not.toHaveTextContent(/^\d+$/)
+    })
+
+    it('unread_countが1のとき「1」を表示する', async () => {
+      vi.mocked(api.listChannels).mockResolvedValue([
+        makeChannel({ id: 1, name: 'general', unread_count: 1 }),
+      ])
+      renderPage()
+      await screen.findByText('general')
+      expect(screen.getByText('1')).toBeInTheDocument()
+    })
+
+    it('unread_countが3のとき「3」を表示する', async () => {
+      vi.mocked(api.listChannels).mockResolvedValue([
+        makeChannel({ id: 1, name: 'general', unread_count: 3 }),
+      ])
+      renderPage()
+      await screen.findByText('general')
+      expect(screen.getByText('3')).toBeInTheDocument()
+    })
+
+    it('unread_countが99のとき「99」を表示する', async () => {
+      vi.mocked(api.listChannels).mockResolvedValue([
+        makeChannel({ id: 1, name: 'general', unread_count: 99 }),
+      ])
+      renderPage()
+      await screen.findByText('general')
+      expect(screen.getByText('99')).toBeInTheDocument()
+    })
+
+    it('unread_countが100以上のとき「99+」を表示する', async () => {
+      vi.mocked(api.listChannels).mockResolvedValue([
+        makeChannel({ id: 1, name: 'general', unread_count: 150 }),
+      ])
+      renderPage()
+      await screen.findByText('general')
+      expect(screen.getByText('99+')).toBeInTheDocument()
+    })
+
+    it('複数チャンネルで個別の未読件数を表示する', async () => {
+      vi.mocked(api.listChannels).mockResolvedValue([
+        makeChannel({ id: 1, name: 'general', unread_count: 2 }),
+        makeChannel({ id: 2, name: 'random', unread_count: 0 }),
+        makeChannel({ id: 3, name: 'dev', unread_count: 10 }),
+      ])
+      renderPage()
+      await screen.findByText('general')
+      expect(screen.getByText('general').closest('li')).toHaveTextContent('2')
+      expect(screen.getByText('random').closest('li')).not.toHaveTextContent(/^\d+$/)
+      expect(screen.getByText('dev').closest('li')).toHaveTextContent('10')
+    })
+
+    it('未読バッジ表示時もjoined・can_manageなど既存表示を維持する', async () => {
+      vi.mocked(api.listChannels).mockResolvedValue([
+        makeChannel({ id: 1, name: 'general', kind: 'public', joined: true, unread_count: 5 }),
+      ])
+      renderPage()
+      const li = (await screen.findByText('general')).closest('li')
+      expect(li).toHaveTextContent('公開')
+      expect(li).toHaveTextContent('✓ 参加済み')
+      expect(li).toHaveTextContent('5')
+    })
   })
 })

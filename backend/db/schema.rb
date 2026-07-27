@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_25_141851) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_26_073607) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -22,6 +22,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_25_141851) do
     t.index ["channel_id", "user_id"], name: "index_channel_memberships_on_channel_id_and_user_id", unique: true
     t.index ["channel_id"], name: "index_channel_memberships_on_channel_id"
     t.index ["user_id"], name: "index_channel_memberships_on_user_id"
+  end
+
+  create_table "channel_read_statuses", force: :cascade do |t|
+    t.bigint "channel_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "last_read_message_id"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id", "channel_id"], name: "index_channel_read_statuses_on_user_id_and_channel_id", unique: true
   end
 
   create_table "channels", force: :cascade do |t|
@@ -80,6 +89,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_25_141851) do
 
   add_foreign_key "channel_memberships", "channels"
   add_foreign_key "channel_memberships", "users"
+  add_foreign_key "channel_read_statuses", "channels", on_delete: :cascade
+  add_foreign_key "channel_read_statuses", "users", on_delete: :cascade
   add_foreign_key "channels", "users", column: "created_by_id"
   add_foreign_key "channels", "workspaces"
   add_foreign_key "messages", "channels"

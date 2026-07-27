@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, type FormEvent } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import * as api from '../api/channels'
 import type { Channel, ChannelMember } from '../api/channels'
+import { updateChannelReadStatus } from '../api/channelReadStatuses'
 import * as messageApi from '../api/messages'
 import type { Message } from '../api/messages'
 import { listMembers as listWorkspaceMembers } from '../api/workspaces'
@@ -48,6 +49,8 @@ export function ChannelDetail() {
   const [messageSubmitting, setMessageSubmitting] = useState(false)
 
   const subscriptionRef = useRef<Subscription | null>(null)
+  // 同一message_createdイベントの再受信による既読更新APIの重複呼び出しを防ぐ。
+  const processedCreatedMessageIdsRef = useRef<Set<number>>(new Set())
 
   function withPermissions(message: Omit<Message, 'can_edit' | 'can_delete'>): Message {
     const canManage = user && message.user.id === user.id
@@ -58,19 +61,38 @@ export function ChannelDetail() {
     }
   }
 
+  // 既読更新APIは冪等なため失敗しても無視してよい(閲覧・投稿機能を止めない)。
+  function markAsRead(): void {
+    void updateChannelReadStatus(workspaceId, channelId).catch(() => {
+      // 既読更新の失敗はメッセージ閲覧・投稿を妨げないため無視する
+    })
+  }
+
   function handleMessageEvent(data: unknown) {
     if (isMessageCreatedEvent(data)) {
       // 対象チャンネル以外は無視
       if (data.channel_id !== channelId) return
 
-      const messageWithPerms = withPermissions(data.message)
+      const incomingMessage = withPermissions(data.message)
+
+      // 同じイベントの再受信では既読更新を繰り返さない(state更新とは独立して判定)。
+      const isDuplicateEvent = processedCreatedMessageIdsRef.current.has(incomingMessage.id)
+      if (!isDuplicateEvent) {
+        processedCreatedMessageIdsRef.current.add(incomingMessage.id)
+      }
+
+      // updater は純粋に保ち、副作用(既読更新API呼び出し)は外側で行う。
       setMessages((currentMessages) => {
-        const existingIndex = currentMessages.findIndex((msg) => msg.id === messageWithPerms.id)
+        const existingIndex = currentMessages.findIndex((msg) => msg.id === incomingMessage.id)
         if (existingIndex >= 0) {
-          return currentMessages.map((msg) => (msg.id === messageWithPerms.id ? messageWithPerms : msg))
+          return currentMessages.map((msg) => (msg.id === incomingMessage.id ? incomingMessage : msg))
         }
-        return [...currentMessages, messageWithPerms]
+        return [...currentMessages, incomingMessage]
       })
+
+      if (!isDuplicateEvent && incomingMessage.user.id !== user?.id) {
+        markAsRead()
+      }
     } else if (isMessageUpdatedEvent(data)) {
       // 対象チャンネル以外は無視
       if (data.channel_id !== channelId) return
@@ -105,6 +127,8 @@ export function ChannelDetail() {
     try {
       const msgs = await messageApi.getMessages(workspaceId, channelId)
       setMessages(msgs)
+      // メッセージ一覧取得に成功した場合のみ既読更新する
+      markAsRead()
     } catch (err) {
       setMessageError(err instanceof ApiError ? err.message : 'メッセージ読み込みに失敗しました。')
     } finally {
@@ -141,6 +165,9 @@ export function ChannelDetail() {
       subscriptionRef.current.unsubscribe()
       subscriptionRef.current = null
     }
+
+    // 別チャンネルのメッセージIDが新チャンネルの重複判定に混入しないようにする
+    processedCreatedMessageIdsRef.current.clear()
 
     load()
 

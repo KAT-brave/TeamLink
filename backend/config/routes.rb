@@ -31,6 +31,8 @@ Rails.application.routes.draw do
           delete "members/me", to: "channel_memberships#leave"
           get "members", to: "channel_memberships#index"
           post "members", to: "channel_memberships#create"
+
+          patch "read", to: "channel_read_statuses#update"
         end
       end
     end

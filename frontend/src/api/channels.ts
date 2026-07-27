@@ -3,7 +3,7 @@ import type { User } from './auth'
 
 export type ChannelKind = 'public' | 'private'
 
-// バックエンドの channel_json に対応(joined / can_manage はコントローラ付与)。
+// バックエンドの channel_json に対応(joined / can_manage / unread_count はコントローラ付与)。
 export type Channel = {
   id: number
   workspace_id: number
@@ -13,6 +13,7 @@ export type Channel = {
   created_by_id: number
   joined: boolean
   can_manage: boolean
+  unread_count: number
 }
 
 export type ChannelMember = { id: number; user: User }
