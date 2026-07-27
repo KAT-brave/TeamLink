@@ -689,4 +689,86 @@ RSpec.describe "Api::V1::Messages", type: :request do
       end
     end
   end
+
+  describe "broadcast失敗時のレスポンス整合性" do
+    before do
+      allow(::MessageChannel).to receive(:broadcast_to).and_raise(RuntimeError, "broadcast failed")
+    end
+
+    describe "create" do
+      it "broadcast失敗時も201を返し、Messageは1件だけ保存される" do
+        login_as(member)
+        expect do
+          post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+        end.to change(Message, :count).by(1)
+
+        expect(response).to have_http_status(:created)
+
+        body = JSON.parse(response.body)
+        saved = Message.order(:id).last
+        expect(body["message"]["id"]).to eq(saved.id)
+        expect(body["message"]["body"]).to eq("test")
+      end
+
+      it "broadcast失敗時にerrorログを1回記録する" do
+        login_as(member)
+        expect(Rails.logger).to receive(:error).once.with(
+          a_string_matching(/Message broadcast failed event=message_created message_id=\d+ channel_id=#{public_channel.id} error=RuntimeError message="broadcast failed"/)
+        )
+        post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+      end
+
+      it "ログにメッセージ本文やメールアドレスを含めない" do
+        login_as(member)
+        expect(Rails.logger).to receive(:error) do |log|
+          expect(log).not_to include("test")
+          expect(log).not_to include(member.email)
+        end
+        post "#{base}/#{public_channel.id}/messages", params: { message: { body: "test" } }, as: :json
+      end
+    end
+
+    describe "update" do
+      it "broadcast失敗時も200を返し、更新内容がDBへ保存される" do
+        msg = create(:message, channel: public_channel, user: member, body: "original")
+        login_as(member)
+        patch "#{base}/#{public_channel.id}/messages/#{msg.id}", params: { message: { body: "updated" } }, as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(msg.reload.body).to eq("updated")
+
+        body = JSON.parse(response.body)
+        expect(body["message"]["body"]).to eq("updated")
+      end
+
+      it "broadcast失敗時にerrorログを1回記録する" do
+        msg = create(:message, channel: public_channel, user: member, body: "original")
+        login_as(member)
+        expect(Rails.logger).to receive(:error).once.with(
+          a_string_matching(/Message broadcast failed event=message_updated message_id=#{msg.id} channel_id=#{public_channel.id} error=RuntimeError message="broadcast failed"/)
+        )
+        patch "#{base}/#{public_channel.id}/messages/#{msg.id}", params: { message: { body: "updated" } }, as: :json
+      end
+    end
+
+    describe "destroy" do
+      it "broadcast失敗時も204を返し、Messageは削除済みのまま" do
+        msg = create(:message, channel: public_channel, user: member, body: "delete me")
+        login_as(member)
+        delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+
+        expect(response).to have_http_status(:no_content)
+        expect(Message.exists?(msg.id)).to be(false)
+      end
+
+      it "broadcast失敗時にerrorログを1回記録する" do
+        msg = create(:message, channel: public_channel, user: member, body: "delete me")
+        login_as(member)
+        expect(Rails.logger).to receive(:error).once.with(
+          a_string_matching(/Message broadcast failed event=message_deleted message_id=#{msg.id} channel_id=#{public_channel.id} error=RuntimeError message="broadcast failed"/)
+        )
+        delete "#{base}/#{public_channel.id}/messages/#{msg.id}"
+      end
+    end
+  end
 end

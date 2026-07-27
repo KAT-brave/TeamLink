@@ -95,31 +95,44 @@ module Api
 
       def broadcast_message_created(message)
         channel = message.channel
-        MessageChannel.broadcast_to(
+        ::MessageChannel.broadcast_to(
           channel,
           type: "message_created",
           message: message_broadcast_json(message)
         )
+      rescue StandardError => e
+        log_broadcast_failure("message_created", message.id, channel.id, e)
       end
 
       def broadcast_message_updated(message)
         channel = message.channel
-        MessageChannel.broadcast_to(
+        ::MessageChannel.broadcast_to(
           channel,
           type: "message_updated",
           message: message_broadcast_json(message)
         )
+      rescue StandardError => e
+        log_broadcast_failure("message_updated", message.id, channel.id, e)
       end
 
       def broadcast_message_deleted(message_id, channel_id)
         channel = Channel.find_by(id: channel_id)
         return unless channel
 
-        MessageChannel.broadcast_to(
+        ::MessageChannel.broadcast_to(
           channel,
           type: "message_deleted",
           message_id: message_id,
           channel_id: channel_id
+        )
+      rescue StandardError => e
+        log_broadcast_failure("message_deleted", message_id, channel_id, e)
+      end
+
+      def log_broadcast_failure(event, message_id, channel_id, error)
+        Rails.logger.error(
+          "Message broadcast failed event=#{event} message_id=#{message_id} " \
+          "channel_id=#{channel_id} error=#{error.class} message=#{error.message.inspect}"
         )
       end
 
