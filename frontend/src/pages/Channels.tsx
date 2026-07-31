@@ -33,6 +33,7 @@ export function Channels() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([])
+  const [searchTotalCount, setSearchTotalCount] = useState(0)
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
@@ -91,6 +92,7 @@ export function Channels() {
 
     if (!trimmed) {
       setSearchResults([])
+      setSearchTotalCount(0)
       setHasSearched(false)
       return
     }
@@ -100,9 +102,11 @@ export function Channels() {
     try {
       const data = await searchApi.searchMessages(workspaceId, trimmed)
       setSearchResults(data.messages)
+      setSearchTotalCount(data.total_count)
       setHasSearched(true)
     } catch (err) {
       setSearchResults([])
+      setSearchTotalCount(0)
       setSearchError(err instanceof ApiError ? err.message : 'メッセージの検索に失敗しました。')
     } finally {
       setSearching(false)
@@ -140,7 +144,11 @@ export function Channels() {
 
         {!searching && !searchError && hasSearched && (
           <div className="search-results">
-            <p>検索結果：{searchResults.length}件</p>
+            <p>
+              {searchTotalCount > searchResults.length
+                ? `全${searchTotalCount}件のうち${searchResults.length}件を表示`
+                : `検索結果：${searchTotalCount}件`}
+            </p>
             {searchResults.length === 0 ? (
               <p>該当するメッセージはありません。</p>
             ) : (

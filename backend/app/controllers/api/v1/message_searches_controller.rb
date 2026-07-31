@@ -16,17 +16,21 @@ module Api
           return render json: { messages: [], query: "", total_count: 0 }
         end
 
-        messages = Message
+        matched = Message
           .where(channel_id: visible_channel_ids)
           .where("messages.body ILIKE ? ESCAPE '\\'", "%#{ActiveRecord::Base.sanitize_sql_like(query)}%")
-          .includes(:user, :channel)
-          .order(created_at: :desc)
-          .limit(MAX_RESULTS)
+
+        # total_count は limit 適用前の実際の総該当件数を返す。
+        total_count = matched.count
+
+        messages = matched.includes(:user, :channel)
+                          .order(created_at: :desc)
+                          .limit(MAX_RESULTS)
 
         render json: {
           messages: messages.map { |m| message_search_json(m) },
           query: query,
-          total_count: messages.size
+          total_count: total_count
         }
       end
 

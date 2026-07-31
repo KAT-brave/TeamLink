@@ -311,18 +311,33 @@ describe('Channels', () => {
       expect(item).toHaveTextContent('（編集済み）')
     })
 
-    it('検索結果件数を表示する', async () => {
+    it('total_countが表示件数以下のとき「検索結果：N件」を表示する', async () => {
       vi.mocked(searchApi.searchMessages).mockResolvedValue({
-        messages: [makeSearchResult({ id: 1 }), makeSearchResult({ id: 2 })],
+        messages: [makeSearchResult({ id: 1 }), makeSearchResult({ id: 2 }), makeSearchResult({ id: 3 })],
         query: '障害',
-        total_count: 2,
+        total_count: 3,
       })
       renderPage()
       await screen.findByText('チャンネルがありません。')
       const user = userEvent.setup()
       await user.type(screen.getByLabelText('検索語'), '障害')
       await user.click(screen.getByRole('button', { name: '検索' }))
-      expect(await screen.findByText('検索結果：2件')).toBeInTheDocument()
+      expect(await screen.findByText('検索結果：3件')).toBeInTheDocument()
+    })
+
+    it('total_countが表示件数より多いとき「全N件のうちM件を表示」を表示する', async () => {
+      const messages = Array.from({ length: 20 }, (_, i) => makeSearchResult({ id: i + 1 }))
+      vi.mocked(searchApi.searchMessages).mockResolvedValue({
+        messages,
+        query: '障害',
+        total_count: 25,
+      })
+      renderPage()
+      await screen.findByText('チャンネルがありません。')
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('検索語'), '障害')
+      await user.click(screen.getByRole('button', { name: '検索' }))
+      expect(await screen.findByText('全25件のうち20件を表示')).toBeInTheDocument()
     })
 
     it('0件の場合は該当なしを表示する', async () => {
@@ -371,6 +386,48 @@ describe('Channels', () => {
 
       const link = (await screen.findByText('障害対応を開始します')).closest('a')
       expect(link).toHaveAttribute('href', '/workspaces/10/channels/7')
+    })
+
+    it('検索後に空文字で再検索すると件数表示がリセットされる', async () => {
+      vi.mocked(searchApi.searchMessages).mockResolvedValue({
+        messages: Array.from({ length: 20 }, (_, i) => makeSearchResult({ id: i + 1 })),
+        query: '障害',
+        total_count: 25,
+      })
+      renderPage()
+      await screen.findByText('チャンネルがありません。')
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('検索語'), '障害')
+      await user.click(screen.getByRole('button', { name: '検索' }))
+      expect(await screen.findByText('全25件のうち20件を表示')).toBeInTheDocument()
+
+      await user.clear(screen.getByLabelText('検索語'))
+      await user.click(screen.getByRole('button', { name: '検索' }))
+      expect(screen.queryByText('全25件のうち20件を表示')).not.toBeInTheDocument()
+      expect(screen.queryByText(/件を表示/)).not.toBeInTheDocument()
+    })
+
+    it('検索エラー時に以前の総件数表示が残らない', async () => {
+      vi.mocked(searchApi.searchMessages).mockResolvedValueOnce({
+        messages: Array.from({ length: 20 }, (_, i) => makeSearchResult({ id: i + 1 })),
+        query: '障害',
+        total_count: 25,
+      })
+      renderPage()
+      await screen.findByText('チャンネルがありません。')
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('検索語'), '障害')
+      await user.click(screen.getByRole('button', { name: '検索' }))
+      expect(await screen.findByText('全25件のうち20件を表示')).toBeInTheDocument()
+
+      vi.mocked(searchApi.searchMessages).mockRejectedValueOnce(
+        new ApiError(500, 'メッセージの検索に失敗しました。'),
+      )
+      await user.clear(screen.getByLabelText('検索語'))
+      await user.type(screen.getByLabelText('検索語'), '別の語')
+      await user.click(screen.getByRole('button', { name: '検索' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('メッセージの検索に失敗しました。')
+      expect(screen.queryByText('全25件のうち20件を表示')).not.toBeInTheDocument()
     })
   })
 })

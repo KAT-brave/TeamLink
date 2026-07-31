@@ -131,8 +131,8 @@ RSpec.describe "Api::V1::MessageSearches", type: :request do
       expect(JSON.parse(response.body)["messages"].size).to eq(1)
     end
 
-    it "未参加の一般memberには非公開チャンネルのメッセージが漏れない" do
-      create(:message, channel: private_channel, user: member, body: "非公開チャンネルの投稿です")
+    it "未参加の一般memberには非公開チャンネルのメッセージが漏れず、total_countにも含まれない" do
+      3.times { |i| create(:message, channel: private_channel, user: member, body: "非公開チャンネルの投稿#{i}です") }
       login_as(other)
       get base, params: { q: "非公開" }
       body = JSON.parse(response.body)
@@ -171,6 +171,7 @@ RSpec.describe "Api::V1::MessageSearches", type: :request do
       get base, params: { q: "投稿" }
       body = JSON.parse(response.body)
       expect(body["messages"].size).to eq(1)
+      expect(body["total_count"]).to eq(1)
       expect(body["messages"].first["body"]).to eq("このワークスペースの投稿です")
     end
   end
@@ -188,13 +189,31 @@ RSpec.describe "Api::V1::MessageSearches", type: :request do
       expect(ids).to eq([ new_message.id, old_message.id ])
     end
 
-    it "最大20件までしか返さない" do
-      25.times { |i| create(:message, channel: public_channel, user: member, body: "上限確認メッセージ#{i}") }
+    it "25件該当してもmessagesは20件だが、total_countは実際の総件数25を返す" do
+      messages = Array.new(25) do |i|
+        m = create(:message, channel: public_channel, user: member, body: "上限確認メッセージ#{i}")
+        m.update_columns(created_at: i.hours.ago)
+        m
+      end
+      # created_at が新しい(= 経過時間が短い)順に並ぶため、i が小さいものが先頭に来る。
+      newest_20_ids = messages.sort_by(&:created_at).reverse.first(20).map(&:id)
 
       login_as(member)
       get base, params: { q: "上限確認" }
       body = JSON.parse(response.body)
       expect(body["messages"].size).to eq(20)
+      expect(body["total_count"]).to eq(25)
+      expect(body["messages"].map { |m| m["id"] }).to eq(newest_20_ids)
+    end
+
+    it "20件以下ではtotal_countとmessages.sizeが一致する" do
+      3.times { |i| create(:message, channel: public_channel, user: member, body: "少数確認メッセージ#{i}") }
+
+      login_as(member)
+      get base, params: { q: "少数確認" }
+      body = JSON.parse(response.body)
+      expect(body["messages"].size).to eq(3)
+      expect(body["total_count"]).to eq(3)
     end
   end
 
