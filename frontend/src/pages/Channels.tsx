@@ -2,9 +2,21 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import * as api from '../api/channels'
 import type { Channel, ChannelKind } from '../api/channels'
+import * as searchApi from '../api/messageSearches'
+import type { MessageSearchResult } from '../api/messageSearches'
 import { ApiError } from '../api/client'
 
-// チャンネル一覧 + 作成 + 公開チャンネルへの参加
+function formatDate(isoString: string): string {
+  return new Date(isoString).toLocaleString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// チャンネル一覧 + 作成 + 公開チャンネルへの参加 + メッセージ検索
 export function Channels() {
   const { workspaceId: workspaceIdParam } = useParams<{ workspaceId: string }>()
   const workspaceId = Number(workspaceIdParam)
@@ -18,6 +30,13 @@ export function Channels() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [joiningId, setJoiningId] = useState<number | null>(null)
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([])
+  const [searchTotalCount, setSearchTotalCount] = useState(0)
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [hasSearched, setHasSearched] = useState(false)
 
   async function reload() {
     setChannels(await api.listChannels(workspaceId))
@@ -66,6 +85,34 @@ export function Channels() {
     }
   }
 
+  async function handleSearch(e: FormEvent) {
+    e.preventDefault()
+    setSearchError(null)
+    const trimmed = searchQuery.trim()
+
+    if (!trimmed) {
+      setSearchResults([])
+      setSearchTotalCount(0)
+      setHasSearched(false)
+      return
+    }
+
+    if (searching) return
+    setSearching(true)
+    try {
+      const data = await searchApi.searchMessages(workspaceId, trimmed)
+      setSearchResults(data.messages)
+      setSearchTotalCount(data.total_count)
+      setHasSearched(true)
+    } catch (err) {
+      setSearchResults([])
+      setSearchTotalCount(0)
+      setSearchError(err instanceof ApiError ? err.message : 'メッセージの検索に失敗しました。')
+    } finally {
+      setSearching(false)
+    }
+  }
+
   if (loading) return <p>読み込み中...</p>
 
   return (
@@ -75,6 +122,55 @@ export function Channels() {
         <Link to={`/workspaces/${workspaceId}`}>ワークスペースへ戻る</Link>
       </p>
       {error && <p role="alert">{error}</p>}
+
+      <section className="search-section">
+        <h2>メッセージ検索</h2>
+        <form onSubmit={handleSearch}>
+          <label>
+            検索語
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="メッセージを検索"
+            />
+          </label>
+          <button type="submit" disabled={searching}>
+            検索
+          </button>
+        </form>
+
+        {searching && <p>検索中...</p>}
+        {searchError && <p role="alert">{searchError}</p>}
+
+        {!searching && !searchError && hasSearched && (
+          <div className="search-results">
+            <p>
+              {searchTotalCount > searchResults.length
+                ? `全${searchTotalCount}件のうち${searchResults.length}件を表示`
+                : `検索結果：${searchTotalCount}件`}
+            </p>
+            {searchResults.length === 0 ? (
+              <p>該当するメッセージはありません。</p>
+            ) : (
+              <ul>
+                {searchResults.map((m) => (
+                  <li key={m.id} className="search-result-item">
+                    <Link to={`/workspaces/${workspaceId}/channels/${m.channel.id}`}>
+                      <div className="search-result-header">
+                        <span className="search-result-channel">#{m.channel.name}</span>
+                        <strong>{m.user.name}</strong>
+                        <span className="message-date">{formatDate(m.created_at)}</span>
+                        {m.is_edited && <span className="message-edited">（編集済み）</span>}
+                      </div>
+                      <div className="message-body">{m.body}</div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </section>
 
       {channels.length === 0 ? (
         <p>チャンネルがありません。</p>
