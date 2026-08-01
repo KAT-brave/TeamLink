@@ -12,9 +12,11 @@ RUN npm ci
 
 COPY . .
 
-# Action Cable は Nginx 経由で同一オリジンの /cable へ接続する。
+# Action Cable の接続先。既定は Nginx 経由の同一オリジン /cable。
+# ビルド時に build arg で上書き可能(Vite は import.meta.env をビルド時に展開するため)。
 # API クライアントは相対パス /api を使うため VITE_API_BASE_URL は不要。
-ENV VITE_CABLE_URL=/cable
+ARG VITE_CABLE_URL=/cable
+ENV VITE_CABLE_URL=${VITE_CABLE_URL}
 RUN npm run build
 
 # ---- 実行ステージ: Nginx で静的配信 + API/Cable プロキシ ----

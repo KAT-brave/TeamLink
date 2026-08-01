@@ -50,8 +50,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports:
-      - "3001:3000"
+    # backend はホストへ公開しない。frontend の Nginx が内部ネットワーク経由で
+    # backend:3000 へプロキシする。ホストからの API 確認は Nginx 経由で行う。
+    expose:
+      - "3000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/v1/health"]
       interval: 10s
@@ -62,6 +64,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.production
+      # VITE_* はビルド時に静的バンドルへ焼き込む(実行時 env では変更不可)。
+      args:
+        VITE_CABLE_URL: ${VITE_CABLE_URL:-/cable}
     depends_on:
       backend:
         condition: service_healthy
