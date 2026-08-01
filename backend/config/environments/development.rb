@@ -68,6 +68,11 @@ Rails.application.configure do
     "http://127.0.0.1:5173"
   ]
 
+  # Docker Compose 開発環境では Vite のプロキシ(changeOrigin)が Host を
+  # "backend:3000" に書き換えるため、Docker 内部のサービス名を許可ホストに追加する。
+  # (Host 認証はポートを除いた host 名で判定するため "backend" を許可すればよい)
+  config.hosts << "backend"
+
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
 
