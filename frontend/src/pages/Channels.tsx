@@ -125,15 +125,15 @@ export function Channels() {
 
       <section className="search-section">
         <h2>メッセージ検索</h2>
-        <form onSubmit={handleSearch}>
-          <label>
-            検索語
+        <form onSubmit={handleSearch} className="search-form">
+          <div className="search-field">
             <input
+              aria-label="検索語"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="メッセージを検索"
             />
-          </label>
+          </div>
           <button type="submit" disabled={searching}>
             検索
           </button>
@@ -173,9 +173,9 @@ export function Channels() {
       </section>
 
       {channels.length === 0 ? (
-        <p>チャンネルがありません。</p>
+        <p className="no-messages">チャンネルがありません。</p>
       ) : (
-        <ul>
+        <ul className="card-list">
           {channels.map((c) => (
             <li key={c.id}>
               <Link to={`/workspaces/${workspaceId}/channels/${c.id}`}>{c.name}</Link>
@@ -187,9 +187,9 @@ export function Channels() {
                   {c.unread_count > 99 ? '99+' : c.unread_count}
                 </span>
               )}
-              {c.description && <span> — {c.description}</span>}
+              {c.description && <span className="channel-desc"> — {c.description}</span>}
               {c.joined ? (
-                <span> ✓ 参加済み</span>
+                <span className="channel-joined">✓ 参加済み</span>
               ) : (
                 c.kind === 'public' && (
                   <button onClick={() => handleJoin(c.id)} disabled={joiningId === c.id}>
