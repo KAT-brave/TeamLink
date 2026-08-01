@@ -111,19 +111,27 @@ export function WorkspaceDetail() {
 
       <section>
         <h2>メンバー</h2>
-        <ul>
+        <ul className="simple-list">
           {members.map((m) => (
             <li key={m.id}>
-              {m.user.name}（{m.role}）
+              <span>
+                {m.user.name}（{m.role}）
+              </span>
               {isManager && m.role !== 'owner' && m.user.id !== user?.id && (
-                <button onClick={() => handleRemove(m.user.id)}>削除</button>
+                <button className="btn-danger" onClick={() => handleRemove(m.user.id)}>
+                  削除
+                </button>
               )}
             </li>
           ))}
         </ul>
       </section>
 
-      {role !== 'owner' && <button onClick={handleLeave}>退出する</button>}
+      {role !== 'owner' && (
+        <button className="btn-danger" onClick={handleLeave}>
+          退出する
+        </button>
+      )}
     </div>
   )
 }

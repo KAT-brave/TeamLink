@@ -368,7 +368,7 @@ export function ChannelDetail() {
         </button>
       )}
       {canLeave && (
-        <button onClick={handleLeave} disabled={submitting}>
+        <button className="btn-danger" onClick={handleLeave} disabled={submitting}>
           退出する
         </button>
       )}
@@ -403,7 +403,7 @@ export function ChannelDetail() {
 
       <section>
         <h2>メンバー</h2>
-        <ul>
+        <ul className="simple-list">
           {members.map((m) => (
             <li key={m.id}>{m.user.name}</li>
           ))}
@@ -533,7 +533,7 @@ export function ChannelDetail() {
       {channel.can_manage && (
         <section>
           <h2>チャンネルを削除</h2>
-          <button onClick={handleDelete} disabled={submitting}>
+          <button className="btn-danger" onClick={handleDelete} disabled={submitting}>
             削除
           </button>
         </section>

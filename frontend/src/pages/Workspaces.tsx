@@ -52,29 +52,39 @@ export function Workspaces() {
       <h1>ワークスペース</h1>
       {error && <p role="alert">{error}</p>}
 
-      <ul>
-        {workspaces.map((w) => (
-          <li key={w.id}>
-            <Link to={`/workspaces/${w.id}`}>{w.name}</Link>
-          </li>
-        ))}
-      </ul>
+      {workspaces.length === 0 ? (
+        <p className="no-messages">参加中のワークスペースはありません。</p>
+      ) : (
+        <ul className="card-list">
+          {workspaces.map((w) => (
+            <li key={w.id}>
+              <Link to={`/workspaces/${w.id}`}>{w.name}</Link>
+            </li>
+          ))}
+        </ul>
+      )}
 
-      <form onSubmit={handleCreate}>
-        <label>
-          ワークスペース名
-          <input value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <button type="submit">作成</button>
-      </form>
+      <section>
+        <h2>ワークスペースを作成</h2>
+        <form onSubmit={handleCreate}>
+          <label>
+            ワークスペース名
+            <input value={name} onChange={(e) => setName(e.target.value)} required />
+          </label>
+          <button type="submit">作成</button>
+        </form>
+      </section>
 
-      <form onSubmit={handleJoin}>
-        <label>
-          招待コードで参加
-          <input value={code} onChange={(e) => setCode(e.target.value)} required />
-        </label>
-        <button type="submit">参加</button>
-      </form>
+      <section>
+        <h2>ワークスペースに参加</h2>
+        <form onSubmit={handleJoin}>
+          <label>
+            招待コードで参加
+            <input value={code} onChange={(e) => setCode(e.target.value)} required />
+          </label>
+          <button type="submit">参加</button>
+        </form>
+      </section>
     </div>
   )
 }
