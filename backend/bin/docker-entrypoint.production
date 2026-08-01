@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+# 本番用エントリポイント。
+# RUN_DB_MIGRATION=true のときだけ、サーバ起動前に DB マイグレーションを実行する。
+# (複数レプリカ運用ではマイグレーションを1回だけ実行するため既定は無効)
+if [ "${RUN_DB_MIGRATION}" = "true" ]; then
+  echo "Running database migrations..."
+  ./bin/rails db:prepare
+fi
+
+exec "$@"

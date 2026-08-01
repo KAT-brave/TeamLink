@@ -1,0 +1,74 @@
+# 本番相当の動作確認用 Compose。
+# 開発用の docker-compose.yml とは別ファイルとして管理する(開発構成は変更しない)。
+# 秘密値は直書きせず、.env.production(Git 管理外)から読み込む。
+# 使い方: .env.production.example を .env.production にコピーして値を設定し、
+#   docker compose -f docker-compose.production.yml --env-file .env.production up --build
+# 専用のプロジェクト名を付与し、開発用 docker-compose.yml のコンテナ/ボリュームと衝突させない。
+name: teamlink-production
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.production
+    environment:
+      RAILS_ENV: production
+      RAILS_MASTER_KEY: ${RAILS_MASTER_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+      RAILS_LOG_TO_STDOUT: "1"
+      # 初回起動時に DB 作成+マイグレーションを実行する。
+      RUN_DB_MIGRATION: "true"
+      PORT: "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.production
+    depends_on:
+      backend:
+        condition: service_healthy
+    # 公開ポートは環境変数で変更可能(既定 8080)。ホスト側で衝突する場合に上書きする。
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+volumes:
+  db_data:
+  redis_data:

@@ -1,0 +1,11 @@
+# 本番イメージへ不要ファイルや秘密情報を持ち込まないための除外設定。
+.git
+.gitignore
+node_modules
+dist
+.env
+.env.*
+!.env.example
+Dockerfile.dev
+Dockerfile.production
+.dockerignore

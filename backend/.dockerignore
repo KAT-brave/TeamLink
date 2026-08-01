@@ -1,0 +1,18 @@
+# 本番イメージへ秘密情報や不要ファイルを持ち込まないための除外設定。
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+config/master.key
+config/credentials/*.key
+tmp/
+log/
+storage/
+spec/
+.rspec
+coverage/
+Dockerfile.dev
+Dockerfile.production
+.dockerignore
+README.md
