@@ -12,6 +12,9 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.env.production
+# サンプルは追跡対象として残す。
+!.env.production.example
 
 # Dependencies / build (言語確定後に追記)
 node_modules/

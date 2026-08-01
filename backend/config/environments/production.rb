@@ -83,4 +83,10 @@ Rails.application.configure do
   #
   # Skip DNS rebinding protection for the default health check endpoint.
   # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+
+  # Action Cable の許可 Origin を FRONTEND_ORIGIN から明示的に設定する。
+  # Host ヘッダの正規化に依存した既定判定では、リバースプロキシ配下で
+  # scheme/port の不一致により WebSocket 接続が拒否されるため。
+  # 値は環境変数から取得し、コードへ直書きしない。
+  config.action_cable.allowed_request_origins = [ ENV.fetch("FRONTEND_ORIGIN") ]
 end
