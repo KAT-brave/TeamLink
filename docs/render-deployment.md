@@ -120,9 +120,13 @@ TeamLink は次の 4 リソースで構成します(すべて TeamLink 専用)�
 
 ## 19. db:prepare の実行確認
 
-- `teamlink-backend` は **preDeployCommand** に `bundle exec rails db:prepare` を設定しています。
-- デプロイ時に一度だけ実行され、Logs に「migrating」等が出ます。
+- **無料プランでは Render の pre-deploy command を利用しません**(pre-deploy command は有料プラン限定機能のため)。
+- 代わりに、`teamlink-backend` の環境変数 `RUN_DB_MIGRATION=true`(`render.yaml` で設定済み)により、**コンテナ起動時に** `bin/docker-entrypoint.production` が `bundle exec rails db:prepare` を実行します。
+- これは **初回起動時にも再デプロイ時にも**適用され、無料プランでも確実にマイグレーションが走ります。
+- `teamlink-backend` → **Logs** で `Running database migrations...` や `migrating` 等が出ることを確認します。
+- **マイグレーションが失敗すると Backend は正常起動しません**(エントリポイントは `set -e` で失敗時に停止)。Live にならない場合は必ず Logs を確認してください。
 - 既存 DB では未適用のマイグレーションだけを適用します。`db:reset` や `db:drop` は使いません(データを初期化しません)。
+- **注意**: health check(`/api/v1/health`)は DB を参照しないため、Healthy 表示だけでは DB テーブルが作成済みかは判断できません。**ログイン API やワークスペース API まで実際に操作**して、`PG::UndefinedTable` 等が出ないことを確認してください(手順 24)。
 
 ## 20. seed が自動実行されないこと
 
@@ -132,7 +136,11 @@ TeamLink は次の 4 リソースで構成します(すべて TeamLink 専用)�
 
 ## 21. デモデータを手動投入する場合(任意)
 
-デモアカウントで動作確認したい場合のみ、手動で投入します。
+> **無料プランの制限**: Render の **Shell(SSH)機能は利用プランによって使用できず、無料プランでは使えません**。そのため下記の Shell 手順は無料プランでは実行できません。**無料プランでの初回公開は、seed なし(空データ)でも動作確認できます**(手順 23〜26 でログイン以外の画面遷移・エラー表示・API 疎通は確認可能。ログイン確認だけはユーザーが必要)。
+
+デモアカウントで動作確認したい場合のみ、手動で投入します。**本番起動時に自動 seed を追加してはいけません**(空データのまま公開して問題ありません)。
+
+**有料プランで Shell が使える場合:**
 
 1. `teamlink-backend` → **Shell** を開きます。
 2. 次を実行します。
@@ -142,6 +150,12 @@ TeamLink は次の 4 リソースで構成します(すべて TeamLink 専用)�
 3. デモアカウント(共通パスワード `password1234`、**本番利用禁止**)が作成されます。
    - `demo-owner@example.com` / `demo-admin@example.com` / `demo-member@example.com` / `demo-outsider@example.com`
 4. 公開デモとして使う場合は、確認後にパスワードを変更するか、デモデータを削除してください。
+
+**無料プランでデモデータを投入したい場合の選択肢:**
+
+- 一時的に `teamlink-backend` を有料プランへ変更して Shell から上記を1回だけ実行し、その後プランを戻す。
+- または、ブラウザから通常のユーザー登録(サインアップ)で手動アカウントを作成して確認する。
+- いずれの場合も、`RAILS_ENV=production` で自動 seed が走る構成は追加しないでください。
 
 ## 22. Backend の health check 確認
 
@@ -209,6 +223,7 @@ TeamLink は次の 4 リソースで構成します(すべて TeamLink 専用)�
 | --- | --- | --- | --- | --- |
 | `RAILS_ENV` | teamlink-backend | 自動(render.yaml) | いいえ | `production` |
 | `RAILS_LOG_TO_STDOUT` | teamlink-backend | 自動(render.yaml) | いいえ | `1` |
+| `RUN_DB_MIGRATION` | teamlink-backend | 自動(render.yaml) | いいえ | `true`(起動時に db:prepare を実行) |
 | `SECRET_KEY_BASE` | teamlink-backend | 自動生成(Render) | **はい** | (Render が生成) |
 | `RAILS_MASTER_KEY` | teamlink-backend | **手動** | **はい** | `config/master.key` の中身 |
 | `DATABASE_URL` | teamlink-backend | 自動(fromDatabase) | **はい** | `postgres://...`(自動) |

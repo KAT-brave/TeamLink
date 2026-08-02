@@ -37,9 +37,12 @@ services:
     dockerContext: ./backend
     plan: free
     healthCheckPath: /api/v1/health
-    # デプロイ時に一度だけ安全にマイグレーションを実行(seed は行わない)。
-    preDeployCommand: bundle exec rails db:prepare
     envVars:
+      # コンテナ起動時に bin/docker-entrypoint.production が db:prepare を実行する。
+      # preDeployCommand は Render の無料プランでは実行されないため使わない。
+      # db:prepare はマイグレーションのみ(seed は seeds.rb の production ガードで実行されない)。
+      - key: RUN_DB_MIGRATION
+        value: "true"
       - key: RAILS_ENV
         value: production
       - key: RAILS_LOG_TO_STDOUT
