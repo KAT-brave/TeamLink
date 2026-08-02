@@ -75,14 +75,16 @@ Rails.application.configure do
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [ :id ]
 
-  # Enable DNS rebinding protection and other `Host` header attacks.
-  # config.hosts = [
-  #   "example.com",     # Allow requests from example.com
-  #   /.*\.example\.com/ # Allow requests from subdomains like `www.example.com`
-  # ]
-  #
-  # Skip DNS rebinding protection for the default health check endpoint.
-  # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+  # Host Authorization(DNS リバインディング保護)を有効に保ちつつ、
+  # 正規のホストだけを環境変数から許可する(全ホスト許可や無効化はしない)。
+  #   - フロント(Nginx)は Host: <FRONTEND_ORIGIN のホスト> を転送するため、それを許可
+  #   - Render は RENDER_EXTERNAL_HOSTNAME を自動設定するため、それも許可(ヘルスチェック用)
+  # いずれも実値はコードへ直書きせず環境変数から取得する。
+  frontend_host = URI.parse(ENV.fetch("FRONTEND_ORIGIN")).host
+  config.hosts << frontend_host if frontend_host.present?
+  config.hosts << ENV["RENDER_EXTERNAL_HOSTNAME"] if ENV["RENDER_EXTERNAL_HOSTNAME"].present?
+  # ヘルスチェックは Host 認証をスキップし、プラットフォームの死活監視を妨げない。
+  config.host_authorization = { exclude: ->(request) { request.path == "/api/v1/health" } }
 
   # Action Cable の許可 Origin を FRONTEND_ORIGIN から明示的に設定する。
   # Host ヘッダの正規化に依存した既定判定では、リバースプロキシ配下で

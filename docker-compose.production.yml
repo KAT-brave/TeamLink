@@ -67,6 +67,11 @@ services:
       # VITE_* はビルド時に静的バンドルへ焼き込む(実行時 env では変更不可)。
       args:
         VITE_CABLE_URL: ${VITE_CABLE_URL:-/cable}
+    environment:
+      # Nginx 設定を起動時に生成する(値は Dockerfile 既定と同じ)。
+      PORT: "80"
+      BACKEND_HOST: backend
+      BACKEND_PORT: "3000"
     depends_on:
       backend:
         condition: service_healthy
