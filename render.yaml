@@ -1,0 +1,92 @@
+# Render Blueprint (render.yaml)
+# TeamLink 専用の 4 リソースを定義する。SupportLog 等の既存サービスとは独立。
+#   - teamlink-frontend : React ビルドを Nginx で配信 + /api・/cable をプロキシ(Docker Web Service)
+#   - teamlink-backend  : Rails API + Action Cable(Docker Web Service)
+#   - teamlink-db       : PostgreSQL(TeamLink 専用)
+#   - teamlink-redis    : Redis(Action Cable 用。TeamLink 専用)
+#
+# 実値(秘密情報)は本ファイルに書かない。
+#   - RAILS_MASTER_KEY : Render Dashboard から手動入力(sync: false)
+#   - SECRET_KEY_BASE  : Render が自動生成(generateValue: true)
+#   - FRONTEND_ORIGIN  : frontend の公開 URL 確定後に手動入力(sync: false)
+#
+# region / plan は Dashboard で確認・変更できるよう最小限にしている。
+# 全サービスを同じリージョンに揃えること(手順書 docs/render-deployment.md を参照)。
+# fromService / fromDatabase が環境で解決できない場合は、
+# 手順書に従い Dashboard で手動設定すること。
+
+databases:
+  - name: teamlink-db
+    databaseName: teamlink_production
+    user: teamlink
+    plan: free
+
+services:
+  # ---- Redis(Action Cable 用。TeamLink 専用)----
+  - type: redis
+    name: teamlink-redis
+    plan: free
+    # 内部ネットワークからのみ接続(外部公開しない)。
+    ipAllowList: []
+
+  # ---- Backend: Rails API + Action Cable ----
+  - type: web
+    name: teamlink-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile.production
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      # コンテナ起動時に bin/docker-entrypoint.production が db:prepare を実行する。
+      # preDeployCommand は Render の無料プランでは実行されないため使わない。
+      # db:prepare はマイグレーションのみ(seed は seeds.rb の production ガードで実行されない)。
+      - key: RUN_DB_MIGRATION
+        value: "true"
+      - key: RAILS_ENV
+        value: production
+      - key: RAILS_LOG_TO_STDOUT
+        value: "1"
+      # Cookie 署名等に使う秘密鍵。Render が安全なランダム値を自動生成する。
+      - key: SECRET_KEY_BASE
+        generateValue: true
+      # credentials 復号キー。Dashboard から手動入力(実値は Git に置かない)。
+      # 本アプリは実行時に credentials を参照しないため、未設定でも起動可能。
+      - key: RAILS_MASTER_KEY
+        sync: false
+      # PostgreSQL 接続文字列(teamlink-db から取得)。
+      - key: DATABASE_URL
+        fromDatabase:
+          name: teamlink-db
+          property: connectionString
+      # Redis 接続文字列(teamlink-redis から取得)。
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: teamlink-redis
+          property: connectionString
+      # フロントの公開オリジン(CORS / Action Cable / Host 許可に使用)。
+      # frontend の URL 確定後に Dashboard で手動入力する。
+      - key: FRONTEND_ORIGIN
+        sync: false
+
+  # ---- Frontend: React(Nginx)+ /api・/cable プロキシ ----
+  - type: web
+    name: teamlink-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile.production
+    dockerContext: ./frontend
+    plan: free
+    envVars:
+      # Nginx のプロキシ先(teamlink-backend の内部ホスト/ポート)。
+      # 環境で解決できない場合は手順書に従い手動設定する。
+      - key: BACKEND_HOST
+        fromService:
+          type: web
+          name: teamlink-backend
+          property: host
+      - key: BACKEND_PORT
+        fromService:
+          type: web
+          name: teamlink-backend
+          property: port

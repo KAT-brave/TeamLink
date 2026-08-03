@@ -58,5 +58,7 @@ USER rails
 EXPOSE 3000
 
 # エントリポイントで(任意で)マイグレーションを実行してからサーバを起動する。
+# ポートは puma.rb が ENV["PORT"](既定 3000)を参照するため -p は指定しない。
+# これにより Render が割り当てる PORT でも待ち受けられる。
 ENTRYPOINT ["bin/docker-entrypoint.production"]
-CMD ["bin/rails", "server", "-b", "0.0.0.0", "-p", "3000"]
+CMD ["bin/rails", "server", "-b", "0.0.0.0"]
