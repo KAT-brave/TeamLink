@@ -89,10 +89,15 @@ TeamLink は次の 4 リソースで構成します(すべて TeamLink 専用)�
 ## 14. FRONTEND_ORIGIN の設定方法
 
 1. まず `teamlink-frontend` の公開 URL(例: `https://teamlink-frontend-xxxx.onrender.com`)を確認します。
-2. `teamlink-backend` → **Environment** の `FRONTEND_ORIGIN` に、その URL を **末尾スラッシュ無し**で入力します。
-   - 例: `https://teamlink-frontend-xxxx.onrender.com`
+2. `teamlink-backend` → **Environment** の `FRONTEND_ORIGIN` に、その URL を **`https://` を含む完全な URL**・**末尾スラッシュ無し**で入力します。
+   - ✅ 例: `https://teamlink-frontend-xxxx.onrender.com`
+   - ❌ スキームなしの `teamlink-frontend-xxxx.onrender.com` は**禁止**です。
+   - 不正な値(スキームなし・不正 URL)の場合、backend は**安全のため起動エラー**になります(黙って全ホスト許可にはしません)。値を修正して再デプロイしてください。
 3. この値は CORS 許可・Action Cable 許可 Origin・Host 認証に使われます。誤ると API/WebSocket がブロックされます。
 4. 入力後、`teamlink-backend` を **Manual Deploy → Deploy latest commit** で再デプロイして反映します。
+5. 再デプロイ後、**ログイン API と Action Cable(WebSocket)** が動作することを確認します(手順 24〜25)。
+
+> **backend の公開 URL について**: `teamlink-backend` にも Render の公開 URL が付きますが、これは**通常の利用者向けアクセス先ではありません**。利用者は **`teamlink-frontend` の公開 URL だけ**を使います。backend への通常 API アクセスは frontend の Nginx 経由(`/api`・`/cable`)のみを正規経路とし、backend 公開 URL 経由の直接アクセスは許可していません(ヘルスチェック `/api/v1/health` のみ例外として許可)。
 
 ## 15. Backend 接続先(BACKEND_HOST / BACKEND_PORT)の設定方法
 
@@ -114,9 +119,14 @@ TeamLink は次の 4 リソースで構成します(すべて TeamLink 専用)�
 
 ## 18. 初回デプロイ手順
 
-1. Blueprint 適用後、4 リソースが順に作成・ビルドされます。
-2. `teamlink-backend` と `teamlink-frontend` の Docker イメージがビルドされ、デプロイされます。
-3. `FRONTEND_ORIGIN`(手順14)を設定したら backend を再デプロイします。
+初回は `FRONTEND_ORIGIN` が未確定(frontend URL が発行される前)ですが、**backend は `FRONTEND_ORIGIN` 未設定でも起動できます**(未設定の間は通常 API の許可ホストを追加しない設計)。次の順序で進めます。
+
+1. Blueprint を適用し、4 リソースが作成・ビルドされます。
+2. `FRONTEND_ORIGIN` 未設定のまま `teamlink-backend` が起動します(クラッシュしません)。
+3. `teamlink-frontend` の公開 URL が確定します。
+4. `teamlink-backend` → Environment の `FRONTEND_ORIGIN` に、`https://` を含む完全な URL を設定します(手順 14)。
+5. `teamlink-backend` を再デプロイします。
+6. frontend からの API・Action Cable 通信を確認します(手順 24〜26)。
 
 ## 19. db:prepare の実行確認
 
@@ -228,12 +238,12 @@ TeamLink は次の 4 リソースで構成します(すべて TeamLink 専用)�
 | `RAILS_MASTER_KEY` | teamlink-backend | **手動** | **はい** | `config/master.key` の中身 |
 | `DATABASE_URL` | teamlink-backend | 自動(fromDatabase) | **はい** | `postgres://...`(自動) |
 | `REDIS_URL` | teamlink-backend | 自動(fromService) | **はい** | `redis://...`(自動) |
-| `FRONTEND_ORIGIN` | teamlink-backend | **手動** | いいえ | `https://teamlink-frontend-xxxx.onrender.com` |
+| `FRONTEND_ORIGIN` | teamlink-backend | **手動** | いいえ | `https://teamlink-frontend-xxxx.onrender.com`(**`https://` 必須**・スキームなし禁止) |
 | `BACKEND_HOST` | teamlink-frontend | 自動(fromService)/必要時手動 | いいえ | backend の内部ホスト名 |
 | `BACKEND_PORT` | teamlink-frontend | 自動(fromService)/必要時手動 | いいえ | backend の待受ポート |
 | `PORT` | teamlink-frontend / teamlink-backend | 自動(Render) | いいえ | (Render が割り当て) |
 
-> `RENDER_EXTERNAL_HOSTNAME` は Render が各 Web Service に自動設定します。backend はこれを Host 認証の許可ホストに自動追加します(設定不要)。
+> `RENDER_EXTERNAL_HOSTNAME` は Render が各 Web Service に自動設定しますが、backend の **通常 API の許可ホストには使用しません**(backend 公開 URL 経由の直接アクセスは許可しない設計)。ヘルスチェック `/api/v1/health` は Host 認証の exclude で通過するため、この設定は不要です。
 
 ## 補足: VITE_CABLE_URL について
 

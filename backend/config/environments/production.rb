@@ -75,20 +75,24 @@ Rails.application.configure do
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [ :id ]
 
+  # FRONTEND_ORIGIN は初回デプロイ時に未設定でも起動できるよう任意取得にする。
+  # 設定済みの場合のみ、完全な URL として検証してホスト名を取り出す
+  # (スキームなし/不正 URL はフェイルオープンを避けるため明示的に例外)。
+  require_relative "../../lib/config_helpers/frontend_origin_host"
+  frontend_origin = ENV["FRONTEND_ORIGIN"].presence
+  frontend_host = FrontendOriginHost.resolve(frontend_origin)
+
   # Host Authorization(DNS リバインディング保護)を有効に保ちつつ、
-  # 正規のホストだけを環境変数から許可する(全ホスト許可や無効化はしない)。
-  #   - フロント(Nginx)は Host: <FRONTEND_ORIGIN のホスト> を転送するため、それを許可
-  #   - Render は RENDER_EXTERNAL_HOSTNAME を自動設定するため、それも許可(ヘルスチェック用)
-  # いずれも実値はコードへ直書きせず環境変数から取得する。
-  frontend_host = URI.parse(ENV.fetch("FRONTEND_ORIGIN")).host
+  # 正規のフロントホスト(Nginx が転送する Host: <FRONTEND_ORIGIN のホスト>)だけを許可する。
+  # backend の公開 URL(RENDER_EXTERNAL_HOSTNAME)は通常 API の許可には追加しない。
+  # 正規経路は frontend Nginx 経由の同一オリジン(httpOnly Cookie + CSRF)であり、
+  # backend 公開 URL への直接アクセスを許すのは不要な攻撃面の拡大になるため。
   config.hosts << frontend_host if frontend_host.present?
-  config.hosts << ENV["RENDER_EXTERNAL_HOSTNAME"] if ENV["RENDER_EXTERNAL_HOSTNAME"].present?
   # ヘルスチェックは Host 認証をスキップし、プラットフォームの死活監視を妨げない。
+  # (RENDER_EXTERNAL_HOSTNAME を許可しなくても Render のヘルスチェックはこの exclude で通る)
   config.host_authorization = { exclude: ->(request) { request.path == "/api/v1/health" } }
 
-  # Action Cable の許可 Origin を FRONTEND_ORIGIN から明示的に設定する。
-  # Host ヘッダの正規化に依存した既定判定では、リバースプロキシ配下で
-  # scheme/port の不一致により WebSocket 接続が拒否されるため。
-  # 値は環境変数から取得し、コードへ直書きしない。
-  config.action_cable.allowed_request_origins = [ ENV.fetch("FRONTEND_ORIGIN") ]
+  # Action Cable の許可 Origin。FRONTEND_ORIGIN 設定時のみ明示設定する。
+  # 未設定(初回デプロイ)では既定のまま起動を妨げない。
+  config.action_cable.allowed_request_origins = [ frontend_origin ] if frontend_origin
 end
