@@ -2,6 +2,8 @@
 
 TeamLink を [Render](https://render.com/) へデプロイするための手順です。初めての方でも進められるよう、画面操作を順に説明します。
 
+> **現在のライブデモ状況**: Blueprint による 4 リソースの作成、Frontend・Backend の起動確認（Deploy live）まで実施済みですが、**現在は追加課金を避けるためライブデモを停止しています**（Render 無料 Web Service 間のプライベートネットワーク制限により Frontend → Backend 通信が 502 になるため）。本手順の**構成・手順自体は検証済み**で、**有料 Backend プランまたは別ホスティング**を使えば、この手順に沿って再公開できます。
+
 > **重要**: 同じ Render アカウントで **SupportLog** も稼働しています。本手順では **SupportLog のサービス・DB・Redis・環境変数を一切変更しません**。TeamLink 専用のリソースだけを新規作成します。
 
 TeamLink は次の 4 リソースで構成します(すべて TeamLink 専用)。
