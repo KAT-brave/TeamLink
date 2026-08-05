@@ -349,16 +349,31 @@ Render Blueprint（[`render.yaml`](render.yaml)）で、TeamLink 専用の 4 リ
 
 ## スクリーンショット
 
-<!-- TODO: ポートフォリオ提出前に画面キャプチャを追加 -->
+ローカルデモ環境（`TeamLink Demo` ワークスペース／デモアカウント）の画面です。
 
-以下の画面キャプチャを提出前に追加予定です（現時点では画像はリポジトリに未登録）。
+### ログイン画面
 
-- [ ] ログイン画面
-- [ ] ワークスペース一覧
-- [ ] チャンネル一覧
-- [ ] メッセージ画面
-- [ ] 検索結果
-- [ ] スマートフォン表示
+![TeamLinkのログイン画面](docs/images/login.png)
+
+### ワークスペース一覧
+
+![TeamLinkのワークスペース一覧画面](docs/images/workspaces.png)
+
+### チャンネル一覧
+
+![TeamLinkのチャンネル一覧画面](docs/images/channels.png)
+
+### メッセージ画面
+
+![TeamLinkのメッセージ画面](docs/images/messages.png)
+
+### メッセージ検索
+
+![TeamLinkのメッセージ検索結果画面](docs/images/search.png)
+
+### スマートフォン表示
+
+![TeamLinkのスマートフォン表示](docs/images/mobile.png)
 
 ## 技術的に工夫した点
 
